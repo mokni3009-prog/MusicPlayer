@@ -14,6 +14,7 @@ import androidx.media3.exoplayer.audio.AudioSink
 import androidx.media3.exoplayer.audio.DefaultAudioSink
 import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
+import com.musicplayer.app.report.ErrorReporter
 
 /**
  * Background playback service. Media3 shows the media notification
@@ -49,6 +50,14 @@ class PlaybackService : MediaSessionService() {
         }
 
         override fun onPlayerError(error: PlaybackException) {
+            // v1.0.3: report the failure (error code + audio format, no file paths)
+            // so the user gets a report even when the song just will not play.
+            ErrorReporter.log(
+                ErrorReporter.TYPE_PLAYBACK,
+                "Playback failed: ${error.errorCodeName} (${error.errorCode}): ${error.message}",
+                error,
+                currentFormatInfo() + mapOf("fallback_active" to fallbackActive)
+            )
             // v1.0.1 regression: the custom renderers factory / audio processor
             // can leave the song loaded but never playing. Fall back to a
             // plain default ExoPlayer (no custom audio processors, default
@@ -60,6 +69,23 @@ class PlaybackService : MediaSessionService() {
         }
     }
 
+    /** Audio format of the current track, for playback-error reports (no paths). */
+    private fun currentFormatInfo(): Map<String, Any?> {
+        return try {
+            val format = player?.currentTracks?.groups?.firstOrNull()?.getFormat(0)
+                ?: return emptyMap()
+            mapOf(
+                "mime" to format.sampleMimeType,
+                "codecs" to format.codecs,
+                "bitrate" to format.bitrate.takeIf { it > 0 },
+                "sample_rate" to format.sampleRate.takeIf { it > 0 },
+                "channels" to format.channelCount.takeIf { it > 0 }
+            )
+        } catch (e: Exception) {
+            emptyMap()
+        }
+    }
+
     /**
      * Rebuilds the player with plain defaults and retries playback from the
      * same queue and position. The media session is rebuilt too, so connected
@@ -67,6 +93,18 @@ class PlaybackService : MediaSessionService() {
      * PlayerActivity controller listeners).
      */
     private fun rebuildWithPlainPlayer() {
+        try {
+            rebuildWithPlainPlayerInner()
+        } catch (e: Exception) {
+            ErrorReporter.log(
+                ErrorReporter.TYPE_PLAYBACK,
+                "Playback fallback rebuild failed: ${e.message}",
+                e
+            )
+        }
+    }
+
+    private fun rebuildWithPlainPlayerInner() {
         val old = player ?: return
         val items = (0 until old.mediaItemCount).map { old.getMediaItemAt(it) }
         val index = old.currentMediaItemIndex.coerceAtLeast(0)
@@ -99,6 +137,33 @@ class PlaybackService : MediaSessionService() {
 
     override fun onCreate() {
         super.onCreate()
+        // v1.0.3: the service must never die at startup. If the spectrum
+        // processor / custom renderers factory fails, fall back to a plain
+        // player; if even that fails, report it and leave the service
+        // without a player (controllers fail gracefully, the app still opens).
+        try {
+            buildPlayerWithSpectrum()
+        } catch (e: Exception) {
+            ErrorReporter.log(
+                ErrorReporter.TYPE_ERROR,
+                "PlaybackService init failed, using plain player: ${e.message}",
+                e
+            )
+            try {
+                player = ExoPlayer.Builder(this).build()
+                player?.addListener(playerListener)
+                session = MediaSession.Builder(this, player!!).build()
+            } catch (e2: Exception) {
+                ErrorReporter.log(
+                    ErrorReporter.TYPE_ERROR,
+                    "PlaybackService plain player init failed: ${e2.message}",
+                    e2
+                )
+            }
+        }
+    }
+
+    private fun buildPlayerWithSpectrum() {
         // Media3 1.4.1 has no ExoPlayer.Builder.setAudioProcessors: the audio
         // processors are attached through a DefaultAudioSink built by a custom
         // DefaultRenderersFactory.

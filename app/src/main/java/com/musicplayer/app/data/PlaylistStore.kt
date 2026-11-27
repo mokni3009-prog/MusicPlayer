@@ -4,6 +4,7 @@ import android.content.Context
 import org.json.JSONArray
 import org.json.JSONObject
 import java.util.UUID
+import com.musicplayer.app.report.ErrorReporter
 
 object PlaylistStore {
 
@@ -25,6 +26,15 @@ object PlaylistStore {
             }
         } catch (e: Exception) {
             // No file yet, or unreadable: start with an empty list.
+            // Only report when a file actually exists (a missing file on
+            // first run is normal, not an error).
+            if (context.getFileStreamPath(FILE_NAME).exists()) {
+                ErrorReporter.log(
+                    ErrorReporter.TYPE_DATABASE,
+                    "Playlists file unreadable: ${e.message}",
+                    e
+                )
+            }
         }
         return result
     }
@@ -47,7 +57,11 @@ object PlaylistStore {
                 it.write(arr.toString())
             }
         } catch (e: Exception) {
-            // Ignore save errors in this version.
+            ErrorReporter.log(
+                ErrorReporter.TYPE_DATABASE,
+                "Playlists save failed: ${e.message}",
+                e
+            )
         }
     }
 

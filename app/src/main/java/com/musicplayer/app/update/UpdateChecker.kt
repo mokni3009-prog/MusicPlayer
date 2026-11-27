@@ -13,6 +13,7 @@ import java.io.File
 import java.io.FileOutputStream
 import java.net.HttpURLConnection
 import java.net.URL
+import com.musicplayer.app.report.ErrorReporter
 
 data class ReleaseInfo(
     val tag: String,
@@ -52,6 +53,10 @@ object UpdateChecker {
             conn.readTimeout = 10000
             if (conn.responseCode != 200) {
                 Log.w(TAG, "releases API: ${conn.responseCode}")
+                ErrorReporter.log(
+                    ErrorReporter.TYPE_UPDATE,
+                    "Update check failed: GitHub releases API returned HTTP ${conn.responseCode}"
+                )
                 return@withContext null
             }
             val json = JSONObject(conn.inputStream.bufferedReader().readText())
@@ -72,6 +77,11 @@ object UpdateChecker {
             ReleaseInfo(tag, tag.trimStart('v', 'V'), apkUrl, json.optString("body", null))
         } catch (e: Exception) {
             Log.w(TAG, "fetchLatest failed", e)
+            ErrorReporter.log(
+                ErrorReporter.TYPE_UPDATE,
+                "Update check failed (network or response error): ${e.message}",
+                e
+            )
             null
         }
     }
@@ -88,6 +98,10 @@ object UpdateChecker {
             conn.setRequestProperty("Accept", "application/vnd.android.package-archive")
             if (conn.responseCode != 200) {
                 Log.w(TAG, "download: HTTP ${conn.responseCode}")
+                ErrorReporter.log(
+                    ErrorReporter.TYPE_UPDATE,
+                    "Update download failed: HTTP ${conn.responseCode}"
+                )
                 return@withContext null
             }
             val total = conn.contentLengthLong
@@ -107,6 +121,11 @@ object UpdateChecker {
             outFile
         } catch (e: Exception) {
             Log.w(TAG, "downloadApk failed", e)
+            ErrorReporter.log(
+                ErrorReporter.TYPE_UPDATE,
+                "Update download failed: ${e.message}",
+                e
+            )
             null
         }
     }
@@ -134,6 +153,11 @@ object UpdateChecker {
             true
         } catch (e: Exception) {
             Log.w(TAG, "installApk failed", e)
+            ErrorReporter.log(
+                ErrorReporter.TYPE_UPDATE,
+                "Update install failed: ${e.message}",
+                e
+            )
             false
         }
     }

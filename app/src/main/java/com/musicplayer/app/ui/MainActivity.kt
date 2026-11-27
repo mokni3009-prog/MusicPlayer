@@ -40,6 +40,7 @@ import com.musicplayer.app.data.FavoritesStore
 import com.musicplayer.app.player.PlaybackService
 import com.musicplayer.app.player.PlayerConnection
 import com.musicplayer.app.player.VisualizerHub
+import com.musicplayer.app.report.ErrorReporter
 import com.musicplayer.app.update.ReleaseInfo
 import com.musicplayer.app.update.UpdateChecker
 import kotlinx.coroutines.launch
@@ -77,6 +78,12 @@ class MainActivity : AppCompatActivity(), MainScreenAdapter.Callbacks {
         if (audioGranted) {
             loadSongs()
         } else {
+            // v1.0.3: report denied audio permission so we know the user
+            // sees an empty library because of a permission, not a bug.
+            ErrorReporter.log(
+                ErrorReporter.TYPE_PERMISSION,
+                "Audio permission denied by user (library will be empty)"
+            )
             Toast.makeText(this, getString(R.string.permission_needed), Toast.LENGTH_LONG).show()
         }
     }
@@ -272,9 +279,21 @@ class MainActivity : AppCompatActivity(), MainScreenAdapter.Callbacks {
     }
 
     private fun loadSongs() {
-        allSongs = MusicRepository.loadSongs(this)
-        favorites = FavoritesStore.getFavorites(this)
-        playlists = PlaylistStore.load(this)
+        // v1.0.3: a library-load failure must never kill the launch.
+        // MusicRepository / stores already log their own errors; this is
+        // the last line of defence for anything unexpected here.
+        try {
+            allSongs = MusicRepository.loadSongs(this)
+            favorites = FavoritesStore.getFavorites(this)
+            playlists = PlaylistStore.load(this)
+        } catch (e: Exception) {
+            ErrorReporter.log(
+                ErrorReporter.TYPE_LIBRARY,
+                "Library load failed in MainActivity: ${e.message}",
+                e
+            )
+            allSongs = emptyList()
+        }
         refreshLibrary()
         refreshPlaylists()
         if (allSongs.isEmpty()) {
@@ -503,8 +522,47 @@ class MainActivity : AppCompatActivity(), MainScreenAdapter.Callbacks {
     private fun checkForUpdate(manual: Boolean) {
         if (updateInProgress) return
         lifecycleScope.launch {
-            val latest = UpdateChecker.fetchLatest()
-            if (latest == null) {
+            try {
+                val latest = UpdateChecker.fetchLatest()
+                if (latest == null) {
+                    if (manual) {
+                        ErrorReporter.log(
+                            ErrorReporter.TYPE_UPDATE,
+                            "Manual update check failed (no response)"
+                        )
+                        Toast.makeText(
+                            this@MainActivity,
+                            getString(R.string.update_error),
+                            Toast.LENGTH_SHORT
+                        ).show()
+                    }
+                    return@launch
+                }
+                if (!UpdateChecker.isNewer(latest.tag, BuildConfig.VERSION_NAME)) {
+                    if (manual) {
+                        Toast.makeText(
+                            this@MainActivity,
+                            getString(R.string.update_none),
+                            Toast.LENGTH_SHORT
+                        ).show()
+                    }
+                    return@launch
+                }
+                AlertDialog.Builder(this@MainActivity)
+                    .setTitle(getString(R.string.update_available_title, latest.versionName))
+                    .setMessage(getString(R.string.update_available_msg, latest.versionName))
+                    .setPositiveButton(getString(R.string.update_install)) { _, _ ->
+                        startUpdate(latest)
+                    }
+                    .setNegativeButton(getString(R.string.update_later), null)
+                    .show()
+            } catch (e: Exception) {
+                // The update dialog / flow must never crash the app.
+                ErrorReporter.log(
+                    ErrorReporter.TYPE_UPDATE,
+                    "Update check flow failed: ${e.message}",
+                    e
+                )
                 if (manual) {
                     Toast.makeText(
                         this@MainActivity,
@@ -512,26 +570,7 @@ class MainActivity : AppCompatActivity(), MainScreenAdapter.Callbacks {
                         Toast.LENGTH_SHORT
                     ).show()
                 }
-                return@launch
             }
-            if (!UpdateChecker.isNewer(latest.tag, BuildConfig.VERSION_NAME)) {
-                if (manual) {
-                    Toast.makeText(
-                        this@MainActivity,
-                        getString(R.string.update_none),
-                        Toast.LENGTH_SHORT
-                    ).show()
-                }
-                return@launch
-            }
-            AlertDialog.Builder(this@MainActivity)
-                .setTitle(getString(R.string.update_available_title, latest.versionName))
-                .setMessage(getString(R.string.update_available_msg, latest.versionName))
-                .setPositiveButton(getString(R.string.update_install)) { _, _ ->
-                    startUpdate(latest)
-                }
-                .setNegativeButton(getString(R.string.update_later), null)
-                .show()
         }
     }
 
@@ -575,6 +614,10 @@ class MainActivity : AppCompatActivity(), MainScreenAdapter.Callbacks {
             dialog.dismiss()
             updateInProgress = false
             if (file == null) {
+                ErrorReporter.log(
+                    ErrorReporter.TYPE_UPDATE,
+                    "Update download failed for ${release.tag}"
+                )
                 Toast.makeText(
                     this@MainActivity,
                     getString(R.string.update_download_failed),
@@ -583,6 +626,10 @@ class MainActivity : AppCompatActivity(), MainScreenAdapter.Callbacks {
                 return@launch
             }
             if (!UpdateChecker.installApk(this@MainActivity, file)) {
+                ErrorReporter.log(
+                    ErrorReporter.TYPE_UPDATE,
+                    "Update install failed for ${release.tag}"
+                )
                 Toast.makeText(
                     this@MainActivity,
                     getString(R.string.update_install_failed),

@@ -6,6 +6,7 @@ import android.content.Intent
 import android.content.pm.PackageInstaller
 import android.util.Log
 import android.widget.Toast
+import com.musicplayer.app.report.ErrorReporter
 
 /** Receives the PackageInstaller result for an in-app update. */
 class UpdateInstallReceiver : BroadcastReceiver() {
@@ -24,6 +25,10 @@ class UpdateInstallReceiver : BroadcastReceiver() {
             PackageInstaller.STATUS_FAILURE_INCOMPATIBLE,
             PackageInstaller.STATUS_FAILURE_INVALID,
             PackageInstaller.STATUS_FAILURE_STORAGE -> {
+                ErrorReporter.log(
+                    ErrorReporter.TYPE_UPDATE,
+                    "Update install failed: status=$status message=$message"
+                )
                 Toast.makeText(
                     context,
                     "فشل تثبيت التحديث${if (!message.isNullOrBlank()) ": $message" else ""}",

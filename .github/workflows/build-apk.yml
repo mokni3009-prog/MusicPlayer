@@ -39,6 +39,25 @@ jobs:
           RELEASE_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
           RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
 
+      - name: Guard gradient angles
+        # Android GradientDrawable requires android:angle to be a multiple
+        # of 45 — a bad angle (e.g. 165/150 in v1.0.2) crashes the app at
+        # launch before the first frame. Fail the build instead.
+        run: |
+          python3 - <<'PY'
+          import re, pathlib, sys
+          bad = []
+          for p in pathlib.Path('app/src/main/res/drawable').glob('*.xml'):
+              for m in re.finditer(r'android:angle="(\d+)"', p.read_text()):
+                  if int(m.group(1)) % 45 != 0:
+                      bad.append(f"{p}: angle={m.group(1)}")
+          if bad:
+              print("INVALID GRADIENT ANGLES (must be multiples of 45):")
+              print("\n".join(bad))
+              sys.exit(1)
+          print("All gradient angles are multiples of 45.")
+          PY
+
       - name: Build release APK
         run: |
           chmod +x gradlew
@@ -57,15 +76,14 @@ jobs:
       - name: Publish release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v1.0.2
-          name: Zeno Play v1.0.2
+          tag_name: v1.0.3
+          name: Zeno Play v1.0.3
           body: |
-            Zeno Play v1.0.2 — release build (signed with the permanent release key).
+            Zeno Play v1.0.3 — release build (signed with the permanent release key).
 
-            - Approved prototype UI applied natively: library with search and categories (تونسي / شرقي / أجنبي / مفضلة / من جهازي), playlists grid, now-playing card with rotating disc and live waves, full player with "Up next" queue, mini player bar.
-            - Rebranded to Zeno Play: dark navy + gold-to-cyan gradient identity, launcher icon from the Zeno logo, gradient visualizer bars.
-            - Fixed the v1.0.1 playback regression: on a player error the app retries with a plain default ExoPlayer as a fallback.
-            - In-app updates from GitHub: the app checks the latest release, downloads and installs it itself (no uninstall, no manual download).
+            - FIXED the v1.0.2 launch crash: invalid gradient angles (165°/150°) in the app background and playlist drawables made Android throw at window creation, before the first frame. All angles are now multiples of 45°, and CI now fails the build if a bad angle ever comes back.
+            - NEW: in-app error reporting — crashes AND all other errors (playback failures with format/codec details, library scan, permissions, update check/download/install, local storage) are reported automatically to the Zeno crash-report server, with no user action. Reports send immediately, or on the next launch if offline.
+            - Hardened startup: the player service and every startup step are now defensive — the app opens even with no network and even if the update check or the player init fails.
 
-            IMPORTANT: this release is signed with a new release key (v1.0.0/v1.0.1 were debug-signed), so uninstall the old app once and install v1.0.2 fresh. After that, updates — including in-app updates — install normally.
+            Installs over v1.0.2 normally (same release key, no uninstall needed).
           files: app/build/outputs/apk/release/app-release.apk

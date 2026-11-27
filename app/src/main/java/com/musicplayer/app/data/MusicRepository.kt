@@ -3,10 +3,25 @@ package com.musicplayer.app.data
 import android.content.ContentUris
 import android.content.Context
 import android.provider.MediaStore
+import com.musicplayer.app.report.ErrorReporter
 
 object MusicRepository {
 
     fun loadSongs(context: Context): List<Song> {
+        return try {
+            loadSongsInner(context)
+        } catch (e: Exception) {
+            // Library scan must never crash the app: report it and show an empty library.
+            ErrorReporter.log(
+                ErrorReporter.TYPE_LIBRARY,
+                "Library scan failed: ${e.message}",
+                e
+            )
+            emptyList()
+        }
+    }
+
+    private fun loadSongsInner(context: Context): List<Song> {
         val genreBySongId = loadGenres(context)
         val songs = mutableListOf<Song>()
         val uri = MediaStore.Audio.Media.EXTERNAL_CONTENT_URI
