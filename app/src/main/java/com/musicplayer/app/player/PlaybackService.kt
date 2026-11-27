@@ -64,6 +64,13 @@ class PlaybackService : MediaSessionService() {
         }
         player = ExoPlayer.Builder(this)
             .setRenderersFactory(renderersFactory)
+            .build()
+        // Media3 1.4.1 has no ExoPlayer.Builder.setAudioOffloadPreferences:
+        // offload is disabled through the track selection parameters, so the
+        // PCM always flows through the in-app spectrum processor.
+        val exoPlayer = player!!
+        exoPlayer.trackSelectionParameters = exoPlayer.trackSelectionParameters
+            .buildUpon()
             .setAudioOffloadPreferences(
                 TrackSelectionParameters.AudioOffloadPreferences.Builder()
                     .setAudioOffloadMode(
