@@ -11,6 +11,7 @@ import androidx.media3.common.Player
 import com.musicplayer.app.R
 import com.musicplayer.app.databinding.ActivityPlayerBinding
 import com.musicplayer.app.player.PlayerConnection
+import com.musicplayer.app.player.VisualizerHub
 
 class PlayerActivity : AppCompatActivity() {
 
@@ -95,6 +96,7 @@ class PlayerActivity : AppCompatActivity() {
     override fun onStart() {
         super.onStart()
         PlayerConnection.controller?.addListener(playerListener)
+        VisualizerHub.listener = { fft -> binding.visualizerView.updateFft(fft) }
         updateSongInfo()
         updatePlayButton()
         updateShuffleRepeat()
@@ -103,6 +105,7 @@ class PlayerActivity : AppCompatActivity() {
 
     override fun onStop() {
         super.onStop()
+        VisualizerHub.listener = null
         PlayerConnection.controller?.removeListener(playerListener)
         handler.removeCallbacks(updateRunnable)
     }
