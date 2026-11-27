@@ -2,6 +2,7 @@ package com.musicplayer.app.player
 
 import android.media.audiofx.Visualizer
 import androidx.media3.common.Player
+import androidx.media3.common.TrackSelectionParameters
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
@@ -10,9 +11,12 @@ import androidx.media3.session.MediaSessionService
  * Background playback service. Media3 shows the media notification
  * automatically (play / pause / next / previous) while playback is active.
  *
- * It also drives the real audio visualizer: a [Visualizer] is attached to
- * the ExoPlayer audio session and publishes live FFT data to [VisualizerHub],
- * which the player screen draws as animated bars.
+ * It also drives the audio visualizer. The primary source is
+ * [SpectrumAudioProcessor], which reads the real PCM stream inside ExoPlayer
+ * and publishes live spectrum data to [VisualizerHub] — this works on every
+ * device. Audio offload is disabled so the PCM always flows through it.
+ * The system [Visualizer] effect is kept only as a backup: it is only
+ * forwarded when the processor has been silent for a while.
  */
 class PlaybackService : MediaSessionService() {
 
@@ -28,14 +32,23 @@ class PlaybackService : MediaSessionService() {
         override fun onIsPlayingChanged(isPlaying: Boolean) {
             // When paused, publish silence once so the waves fall flat at once.
             if (!isPlaying) {
-                VisualizerHub.publish(ByteArray(1024))
+                VisualizerHub.publishSilence()
             }
         }
     }
 
     override fun onCreate() {
         super.onCreate()
-        player = ExoPlayer.Builder(this).build()
+        player = ExoPlayer.Builder(this)
+            .setAudioProcessors(SpectrumAudioProcessor())
+            .setAudioOffloadPreferences(
+                TrackSelectionParameters.AudioOffloadPreferences.Builder()
+                    .setAudioOffloadMode(
+                        TrackSelectionParameters.AudioOffloadPreferences.AUDIO_OFFLOAD_MODE_DISABLED
+                    )
+                    .build()
+            )
+            .build()
         player?.addListener(playerListener)
         session = MediaSession.Builder(this, player!!).build()
     }
@@ -71,7 +84,9 @@ class PlaybackService : MediaSessionService() {
                     }
 
                     override fun onFftDataCapture(viz: Visualizer, fft: ByteArray, samplingRate: Int) {
-                        VisualizerHub.publish(fft.copyOf())
+                        // Backup only: VisualizerHub drops this while the
+                        // SpectrumAudioProcessor is publishing.
+                        VisualizerHub.publishSystem(fft.copyOf())
                     }
                 },
                 Visualizer.getMaxCaptureRate(), false, true
@@ -79,7 +94,8 @@ class PlaybackService : MediaSessionService() {
             viz.enabled = true
             visualizer = viz
         } catch (e: Exception) {
-            // Visualizer not available on this device; playback continues without waves.
+            // Visualizer not available on this device; the in-app processor
+            // is the primary source, so playback continues with waves anyway.
             visualizer = null
         }
     }

@@ -11,8 +11,8 @@ android {
         applicationId = "com.musicplayer.app"
         minSdk = 26
         targetSdk = 34
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = 2
+        versionName = "1.0.1"
     }
 
     buildToolsVersion = "34.0.0"

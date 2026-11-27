@@ -44,7 +44,7 @@ jobs:
       - name: Publish release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v1.0.0
-          name: Music Player v1.0.0 (debug)
-          body: First debug build of the Music Player app (local MP3 playback, playlists, background playback).
+          tag_name: v1.0.1
+          name: Music Player v1.0.1 (debug)
+          body: Fix: sound waves now read the real audio (PCM spectrum via an in-app audio processor) so they show on every phone; the visualizer area is always visible (minimum bars + baseline) with an animated fallback.
           files: app/build/outputs/apk/debug/app-debug.apk

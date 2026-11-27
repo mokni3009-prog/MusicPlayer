@@ -96,7 +96,7 @@ class PlayerActivity : AppCompatActivity() {
     override fun onStart() {
         super.onStart()
         PlayerConnection.controller?.addListener(playerListener)
-        VisualizerHub.listener = { fft -> binding.visualizerView.updateFft(fft) }
+        VisualizerHub.listener = { magnitudes -> binding.visualizerView.updateMagnitudes(magnitudes) }
         updateSongInfo()
         updatePlayButton()
         updateShuffleRepeat()
@@ -131,6 +131,7 @@ class PlayerActivity : AppCompatActivity() {
 
     private fun updatePlayButton() {
         val playing = PlayerConnection.controller?.isPlaying == true
+        binding.visualizerView.setPlaying(playing)
         binding.playPauseButton.setImageResource(
             if (playing) R.drawable.ic_pause else R.drawable.ic_play
         )
