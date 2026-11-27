@@ -72,7 +72,7 @@ class PlaybackService : MediaSessionService() {
     /** Audio format of the current track, for playback-error reports (no paths). */
     private fun currentFormatInfo(): Map<String, Any?> {
         return try {
-            val format = player?.currentTracks?.groups?.firstOrNull()?.getFormat(0)
+            val format = player?.currentTracks?.groups?.firstOrNull()?.mediaFormat
                 ?: return emptyMap()
             mapOf(
                 "mime" to format.sampleMimeType,
