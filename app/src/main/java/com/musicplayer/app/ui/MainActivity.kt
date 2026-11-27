@@ -36,7 +36,7 @@ import com.musicplayer.app.data.Playlist
 import com.musicplayer.app.data.PlaylistStore
 import com.musicplayer.app.data.Song
 import com.musicplayer.app.databinding.ActivityMainBinding
-import com.musicplayer.app.player.FavoritesStore
+import com.musicplayer.app.data.FavoritesStore
 import com.musicplayer.app.player.PlaybackService
 import com.musicplayer.app.player.PlayerConnection
 import com.musicplayer.app.player.VisualizerHub

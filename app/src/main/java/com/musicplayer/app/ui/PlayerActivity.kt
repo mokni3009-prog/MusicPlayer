@@ -18,7 +18,7 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import com.musicplayer.app.R
 import com.musicplayer.app.data.Song
 import com.musicplayer.app.databinding.ActivityPlayerBinding
-import com.musicplayer.app.player.FavoritesStore
+import com.musicplayer.app.data.FavoritesStore
 import com.musicplayer.app.player.PlaybackService
 import com.musicplayer.app.player.PlayerConnection
 import com.musicplayer.app.player.VisualizerHub

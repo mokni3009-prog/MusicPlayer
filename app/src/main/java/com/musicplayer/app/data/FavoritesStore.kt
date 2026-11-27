@@ -19,6 +19,22 @@ object FavoritesStore {
             ?.toSet() ?: emptySet()
     }
 
+    fun getFavorites(context: Context): Set<Long> = all(context)
+
+    fun addFavorite(context: Context, songId: Long) {
+        val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        val current = all(context).toMutableSet()
+        current.add(songId)
+        prefs.edit().putStringSet(KEY, current.map { it.toString() }.toSet()).apply()
+    }
+
+    fun removeFavorite(context: Context, songId: Long) {
+        val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        val current = all(context).toMutableSet()
+        current.remove(songId)
+        prefs.edit().putStringSet(KEY, current.map { it.toString() }.toSet()).apply()
+    }
+
     fun toggle(context: Context, songId: Long): Boolean {
         val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         val current = all(context).toMutableSet()
