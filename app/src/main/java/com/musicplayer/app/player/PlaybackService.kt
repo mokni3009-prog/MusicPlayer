@@ -1,9 +1,13 @@
 package com.musicplayer.app.player
 
+import android.content.Context
 import android.media.audiofx.Visualizer
 import androidx.media3.common.Player
 import androidx.media3.common.TrackSelectionParameters
+import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.audio.AudioSink
+import androidx.media3.exoplayer.audio.DefaultAudioSink
 import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
 
@@ -23,6 +27,7 @@ class PlaybackService : MediaSessionService() {
     private var player: ExoPlayer? = null
     private var session: MediaSession? = null
     private var visualizer: Visualizer? = null
+    private val spectrumProcessor = SpectrumAudioProcessor()
 
     private val playerListener = object : Player.Listener {
         override fun onAudioSessionIdChanged(audioSessionId: Int) {
@@ -39,8 +44,26 @@ class PlaybackService : MediaSessionService() {
 
     override fun onCreate() {
         super.onCreate()
+        // Media3 1.4.1 has no ExoPlayer.Builder.setAudioProcessors: the audio
+        // processors are attached through a DefaultAudioSink built by a custom
+        // DefaultRenderersFactory.
+        val renderersFactory = object : DefaultRenderersFactory(this) {
+            override fun buildAudioSink(
+                context: Context,
+                enableFloatOutput: Boolean,
+                enableAudioTrackPlaybackParams: Boolean
+            ): AudioSink? {
+                return DefaultAudioSink.Builder(context)
+                    .setEnableFloatOutput(enableFloatOutput)
+                    .setEnableAudioTrackPlaybackParams(enableAudioTrackPlaybackParams)
+                    .setAudioProcessors(
+                        arrayOf<androidx.media3.common.audio.AudioProcessor>(spectrumProcessor)
+                    )
+                    .build()
+            }
+        }
         player = ExoPlayer.Builder(this)
-            .setAudioProcessors(SpectrumAudioProcessor())
+            .setRenderersFactory(renderersFactory)
             .setAudioOffloadPreferences(
                 TrackSelectionParameters.AudioOffloadPreferences.Builder()
                     .setAudioOffloadMode(
