@@ -3,15 +3,15 @@ package com.musicplayer.app.ui
 import android.os.Bundle
 import android.view.View
 import androidx.appcompat.app.AlertDialog
-import androidx.appcompat.app.AppCompatActivity
 import androidx.recyclerview.widget.LinearLayoutManager
+import com.musicplayer.app.R
 import com.musicplayer.app.data.MusicRepository
 import com.musicplayer.app.data.PlaylistStore
 import com.musicplayer.app.data.Song
 import com.musicplayer.app.databinding.ActivityPlaylistDetailBinding
 import com.musicplayer.app.player.PlayerConnection
 
-class PlaylistDetailActivity : AppCompatActivity() {
+class PlaylistDetailActivity : FullScreenActivity() {
 
     companion object {
         const val EXTRA_PLAYLIST_ID = "playlist_id"
@@ -82,11 +82,11 @@ class PlaylistDetailActivity : AppCompatActivity() {
         val titles = all.map { "${it.title} — ${it.artist}" }.toTypedArray()
         val checked = all.map { playlist.songIds.contains(it.id) }.toBooleanArray()
         AlertDialog.Builder(this)
-            .setTitle("Add songs")
+            .setTitle(R.string.add_songs)
             .setMultiChoiceItems(titles, checked) { _, which, isChecked ->
                 checked[which] = isChecked
             }
-            .setPositiveButton("Save") { _, _ ->
+            .setPositiveButton(R.string.save) { _, _ ->
                 val lists = PlaylistStore.load(this)
                 val p = lists.find { it.id == playlistId } ?: return@setPositiveButton
                 p.songIds.clear()
@@ -96,7 +96,7 @@ class PlaylistDetailActivity : AppCompatActivity() {
                 PlaylistStore.save(this, lists)
                 loadSongs()
             }
-            .setNegativeButton("Cancel", null)
+            .setNegativeButton(R.string.cancel, null)
             .show()
     }
 }

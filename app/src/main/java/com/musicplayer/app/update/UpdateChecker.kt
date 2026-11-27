@@ -65,13 +65,31 @@ object UpdateChecker {
             val assets = json.optJSONArray("assets")
             var apkUrl: String? = null
             if (assets != null) {
+                val candidates = mutableListOf<Pair<String, String>>()
                 for (i in 0 until assets.length()) {
                     val a = assets.getJSONObject(i)
-                    if (a.optString("name").endsWith(".apk")) {
-                        apkUrl = a.optString("browser_download_url")
-                        break
+                    val name = a.optString("name")
+                    if (name.endsWith(".apk")) {
+                        candidates.add(name to a.optString("browser_download_url"))
                     }
                 }
+                // ABI splits: the release holds one APK per architecture
+                // (ZenoPlay-v<version>-<abi>.apk). Pick the one built for
+                // this device's ABI. The exact "-<abi>.apk" match matters:
+                // a plain "x86" substring would also match "x86_64".
+                // The "-<abi>-release.apk" form is kept for old releases.
+                outer@ for (abi in Build.SUPPORTED_ABIS) {
+                    for ((name, url) in candidates) {
+                        if (name.contains("-$abi.apk", ignoreCase = true) ||
+                            name.contains("-$abi-release.apk", ignoreCase = true)
+                        ) {
+                            apkUrl = url
+                            break@outer
+                        }
+                    }
+                }
+                // Fallback: single universal APK (old releases) or first asset.
+                if (apkUrl.isNullOrBlank()) apkUrl = candidates.firstOrNull()?.second
             }
             if (apkUrl.isNullOrBlank()) return@withContext null
             ReleaseInfo(tag, tag.trimStart('v', 'V'), apkUrl, json.optString("body", null))

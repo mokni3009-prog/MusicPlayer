@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- WhatsApp icon (simplified): green speech bubble with a white handset.
+     Drawn from the standard WhatsApp shapes (green #25D366, Material handset). -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <!-- Speech bubble -->
+    <path
+        android:fillColor="#25D366"
+        android:pathData="M12,2a10,10 0 1,0 0,20 10,10 0 1,0 0,-20z" />
+    <!-- Bubble tail (bottom left) -->
+    <path
+        android:fillColor="#25D366"
+        android:pathData="M4.9,16.6 L2,22 L8.4,19.4 Z" />
+    <!-- White handset -->
+    <group
+        android:pivotX="12"
+        android:pivotY="12"
+        android:scaleX="0.62"
+        android:scaleY="0.62">
+        <path
+            android:fillColor="#FFFFFF"
+            android:pathData="M6.62,10.79c1.44,2.83 3.76,5.14 6.59,6.59l2.2,-2.2c0.27,-0.27 0.67,-0.36 1.02,-0.24c1.12,0.37 2.33,0.57 3.57,0.57c0.55,0 1,0.45 1,1V20c0,0.55 -0.45,1 -1,1c-9.39,0 -17,-7.61 -17,-17c0,-0.55 0.45,-1 1,-1h3.5c0.55,0 1,0.45 1,1c0,1.25 0.2,2.45 0.57,3.57c0.11,0.35 0.03,0.74 -0.25,1.02l-2.2,2.2z" />
+    </group>
+</vector>

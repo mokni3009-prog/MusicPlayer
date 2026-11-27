@@ -67,23 +67,41 @@ jobs:
           RELEASE_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
           RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
 
-      - name: Upload APK artifact
+      - name: Rename APKs (ZenoPlay-v<version>-<abi>.apk)
+        # The downloaded file must be named after the app + version, not
+        # app-release.apk. The version is read from build.gradle.kts so
+        # future releases are named automatically (e.g. ZenoPlay-v1.0.5.apk).
+        # ABI splits produce one APK per architecture, so the ABI stays in
+        # the name to keep the four files distinct.
+        run: |
+          VERSION=$(grep -oP 'versionName\s*=\s*"\K[^"]+' app/build.gradle.kts)
+          echo "version: $VERSION"
+          for f in app/build/outputs/apk/release/app-*-release.apk; do
+            abi=$(basename "$f" | sed -E 's/^app-(.*)-release\.apk$/\1/')
+            mv "$f" "app/build/outputs/apk/release/ZenoPlay-v${VERSION}-${abi}.apk"
+          done
+          ls -l app/build/outputs/apk/release/
+
+      - name: Upload APK artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: zeno-play-release-apk
-          path: app/build/outputs/apk/release/app-release.apk
+          name: zeno-play-release-apks
+          path: app/build/outputs/apk/release/*.apk
 
       - name: Publish release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v1.0.3
-          name: Zeno Play v1.0.3
+          tag_name: v1.0.4
+          name: Zeno Play v1.0.4
           body: |
-            Zeno Play v1.0.3 — release build (signed with the permanent release key).
+            Zeno Play v1.0.4 — release build (signed with the permanent release key).
 
-            - FIXED the v1.0.2 launch crash: invalid gradient angles (165°/150°) in the app background and playlist drawables made Android throw at window creation, before the first frame. All angles are now multiples of 45°, and CI now fails the build if a bad angle ever comes back.
-            - NEW: in-app error reporting — crashes AND all other errors (playback failures with format/codec details, library scan, permissions, update check/download/install, local storage) are reported automatically to the Zeno crash-report server, with no user action. Reports send immediately, or on the next launch if offline.
-            - Hardened startup: the player service and every startup step are now defensive — the app opens even with no network and even if the update check or the player init fails.
+            - NEW interface: the approved French redesign — tabs CHANSONS / ALBUMS / ARTISTES / PLAYLISTS / DOSSIERS / PARAMÈTRES, rotating circular cover, mini player, notification preview. App name on one line. "Gratuit pour toujours · Sans publicité · Vie privée respectée — pour toujours" on the splash (3 seconds, animated logo).
+            - 24 features: no ads, uninterrupted playback, volume to 200% with BOOST, synced lyrics (LRCLIB, opt-in), Android Auto, folders + proper shuffle + reorderable queue, real 5-band EQ per output, batch tag editing, Gapless + ReplayGain + speed, all formats (Media3 + libVLC fallback, automatic), local backup + M3U, French/Arabic/English UI with Arabic/French metadata, live waves — now a circular smoke ring around the cover that breathes with the bass (the cover pulses with the beat), sleep timer, up to 20 saved queues, home-screen widget, smart playlists, listening stats, A–B repeat + play-once, ringtone cutter, AMOLED black, album-cover management, Chromecast (opt-in, off by default).
+            - Privacy first: no account, no tracking, no ads, no extra permissions. Internet only for in-app updates, error reports and the optional lyrics/Chromecast.
+            - The circular player now shows the song's REAL album cover; without a cover it shows the Zeno logo without any square frame. Same rule in the mini player and the song list.
+            - Contact us on WhatsApp from the settings screen.
+            - Four APKs (one per ABI) — download the one for your device (arm64-v8a for most phones); the in-app updater picks the right one automatically.
 
-            Installs over v1.0.2 normally (same release key, no uninstall needed).
-          files: app/build/outputs/apk/release/app-release.apk
+            Installs over v1.0.3 normally (same release key, no uninstall needed).
+          files: app/build/outputs/apk/release/*.apk

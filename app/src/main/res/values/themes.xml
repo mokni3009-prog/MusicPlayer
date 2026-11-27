@@ -1,5 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <!--
+      Force full screen: edge-to-edge content, transparent system bars,
+      layout into the display cutout. The activities also re-apply
+      immersive sticky flags on every focus change so the status and
+      navigation bars never stay visible (see FullScreenActivity).
+    -->
     <style name="Theme.ZenoPlay" parent="Theme.Material3.Dark.NoActionBar">
         <item name="colorPrimary">@color/md_theme_primary</item>
         <item name="colorOnPrimary">@color/md_theme_onPrimary</item>
@@ -10,5 +16,12 @@
         <item name="android:windowBackground">@drawable/bg_app</item>
         <item name="android:textColor">@color/zeno_ink</item>
         <item name="android:textColorSecondary">@color/zeno_ink2</item>
+        <item name="android:windowFullscreen">true</item>
+        <item name="android:windowTranslucentStatus">true</item>
+        <item name="android:windowTranslucentNavigation">true</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:windowLayoutInDisplayCutoutMode">shortEdges</item>
+        <item name="android:windowDrawsSystemBarBackgrounds">true</item>
     </style>
 </resources>

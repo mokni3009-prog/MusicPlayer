@@ -11,9 +11,9 @@ object CreatePlaylistDialog {
     fun show(activity: Activity, onCreated: ((Playlist) -> Unit)? = null) {
         val binding = DialogCreatePlaylistBinding.inflate(activity.layoutInflater)
         AlertDialog.Builder(activity)
-            .setTitle("New playlist")
+            .setTitle(activity.getString(com.musicplayer.app.R.string.create_playlist))
             .setView(binding.root)
-            .setPositiveButton("Create") { _, _ ->
+            .setPositiveButton(activity.getString(com.musicplayer.app.R.string.create)) { _, _ ->
                 val name = binding.playlistNameInput.text.toString().trim()
                 if (name.isNotEmpty()) {
                     val playlist = PlaylistStore.create(activity, name)
@@ -21,7 +21,7 @@ object CreatePlaylistDialog {
                     (activity as? MainActivity)?.refreshPlaylists()
                 }
             }
-            .setNegativeButton("Cancel", null)
+            .setNegativeButton(activity.getString(com.musicplayer.app.R.string.cancel), null)
             .show()
     }
 }

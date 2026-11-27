@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- AMOLED black theme: pure-black window background and dark surfaces,
+     same gold-to-cyan identity. Applied before onCreate by FullScreenActivity. -->
+<resources>
+    <style name="Theme.ZenoPlay.Amoled" parent="Theme.ZenoPlay">
+        <item name="android:windowBackground">@drawable/bg_app_amoled</item>
+        <item name="colorSurface">#000000</item>
+        <item name="colorPrimaryContainer">#000000</item>
+    </style>
+</resources>

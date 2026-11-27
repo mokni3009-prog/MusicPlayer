@@ -1,0 +1,117 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@drawable/bg_app"
+    android:gravity="center"
+    android:orientation="vertical"
+    android:padding="32dp">
+
+    <!-- Logo with its neon glow: the glow sits behind the card and pulses,
+         the shine sweeps across the logo inside the card. -->
+    <FrameLayout
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center_horizontal">
+
+        <View
+            android:id="@+id/logoGlow"
+            android:layout_width="176dp"
+            android:layout_height="176dp"
+            android:layout_gravity="center"
+            android:alpha="0.55"
+            android:background="@drawable/bg_logo_glow" />
+
+        <com.google.android.material.card.MaterialCardView
+            android:id="@+id/logoCard"
+            android:layout_width="140dp"
+            android:layout_height="140dp"
+            android:layout_gravity="center"
+            app:cardCornerRadius="36dp"
+            app:cardElevation="0dp"
+            app:strokeColor="#FFD76A"
+            app:strokeWidth="2dp">
+
+            <ImageView
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:scaleType="centerCrop"
+                android:src="@drawable/zeno_logo" />
+
+            <ImageView
+                android:id="@+id/shineView"
+                android:layout_width="56dp"
+                android:layout_height="match_parent"
+                android:layout_gravity="center"
+                android:rotation="20"
+                android:scaleType="fitXY"
+                android:src="@drawable/bg_shine" />
+
+        </com.google.android.material.card.MaterialCardView>
+
+    </FrameLayout>
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="28dp"
+        android:maxLines="1"
+        android:text="@string/app_name"
+        android:textColor="@color/zeno_ink"
+        android:textSize="40sp"
+        android:textStyle="bold" />
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="6dp"
+        android:text="@string/app_subtitle"
+        android:textColor="@color/zeno_ink2"
+        android:textSize="17sp"
+        android:textStyle="bold" />
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="18dp"
+        android:gravity="center"
+        android:maxLines="3"
+        android:paddingStart="16dp"
+        android:paddingEnd="16dp"
+        android:text="@string/app_free"
+        android:textColor="@color/zeno_gold"
+        android:textSize="15sp"
+        android:textStyle="bold" />
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="36dp"
+        android:text="@string/splash_loading"
+        android:textColor="@color/zeno_ink3"
+        android:textSize="14sp" />
+
+    <!-- Progress of the 3 s splash, so the user sees the remaining time. -->
+    <ProgressBar
+        android:id="@+id/splashProgress"
+        style="?android:attr/progressBarStyleHorizontal"
+        android:layout_width="match_parent"
+        android:layout_height="4dp"
+        android:layout_marginStart="24dp"
+        android:layout_marginTop="22dp"
+        android:layout_marginEnd="24dp"
+        android:max="3000"
+        android:progress="0"
+        android:progressDrawable="@drawable/seek_progress" />
+
+    <TextView
+        android:id="@+id/splashCountdown"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="10dp"
+        android:text="3 s"
+        android:textColor="@color/zeno_ink3"
+        android:textSize="13sp" />
+
+</LinearLayout>

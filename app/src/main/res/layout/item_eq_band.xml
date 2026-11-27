@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:gravity="center_vertical"
+    android:orientation="horizontal"
+    android:paddingTop="6dp"
+    android:paddingBottom="6dp">
+
+    <TextView
+        android:id="@+id/bandLabel"
+        android:layout_width="64dp"
+        android:layout_height="wrap_content"
+        android:textColor="@color/zeno_ink2"
+        android:textSize="14sp"
+        android:textStyle="bold" />
+
+    <SeekBar
+        android:id="@+id/bandSeek"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:max="24"
+        android:progress="12"
+        android:progressDrawable="@drawable/seek_progress"
+        android:thumb="@drawable/seek_thumb" />
+
+    <TextView
+        android:id="@+id/bandValue"
+        android:layout_width="64dp"
+        android:layout_height="wrap_content"
+        android:gravity="end"
+        android:text="0 dB"
+        android:textColor="@color/zeno_ink"
+        android:textSize="13sp"
+        android:textStyle="bold" />
+
+</LinearLayout>

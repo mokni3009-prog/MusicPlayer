@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 5-band equalizer labels (60 / 230 / 910 / 3600 / 14000 Hz, as in
+         EqManager). Frequencies are language-neutral, one file is enough. -->
+    <string-array name="eq_band_labels">
+        <item>60 Hz</item>
+        <item>230 Hz</item>
+        <item>910 Hz</item>
+        <item>3,6 kHz</item>
+        <item>14 kHz</item>
+    </string-array>
+</resources>

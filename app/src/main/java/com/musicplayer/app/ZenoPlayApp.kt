@@ -1,8 +1,10 @@
 package com.musicplayer.app
 
 import android.app.Application
+import android.content.Context
 import android.util.Log
 import com.musicplayer.app.report.ErrorReporter
+import com.musicplayer.app.ui.LocaleHelper
 
 /**
  * Application class: installs the global crash handler and flushes any
@@ -10,6 +12,10 @@ import com.musicplayer.app.report.ErrorReporter
  * starts. Every step is guarded — a failure here must never kill the launch.
  */
 class ZenoPlayApp : Application() {
+    override fun attachBaseContext(base: Context) {
+        super.attachBaseContext(LocaleHelper.wrapContext(base))
+    }
+
     override fun onCreate() {
         super.onCreate()
         try {

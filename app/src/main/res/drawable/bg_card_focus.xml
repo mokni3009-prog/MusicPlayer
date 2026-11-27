@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- List row background: gold/cyan highlight when focused (D-pad on TV),
+     plain card otherwise. Used by SongAdapter and GroupAdapter rows. -->
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:state_focused="true" android:drawable="@drawable/bg_card_current" />
+    <item android:drawable="@drawable/bg_card" />
+</selector>

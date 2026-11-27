@@ -12,9 +12,9 @@ object AddToPlaylistDialog {
     fun show(activity: Activity, song: Song) {
         val playlists = PlaylistStore.load(activity)
         val names = playlists.map { it.name }.toMutableList()
-        names.add("New playlist...")
+        names.add(activity.getString(com.musicplayer.app.R.string.new_playlist))
         AlertDialog.Builder(activity)
-            .setTitle("Add to playlist")
+            .setTitle(activity.getString(com.musicplayer.app.R.string.add_to_playlist))
             .setItems(names.toTypedArray()) { _, which ->
                 if (which == playlists.size) {
                     CreatePlaylistDialog.show(activity) { playlist ->
@@ -24,7 +24,7 @@ object AddToPlaylistDialog {
                     addSong(activity, playlists[which].id, song)
                 }
             }
-            .setNegativeButton("Cancel", null)
+            .setNegativeButton(activity.getString(com.musicplayer.app.R.string.cancel), null)
             .show()
     }
 
@@ -32,11 +32,19 @@ object AddToPlaylistDialog {
         val lists = PlaylistStore.load(activity)
         val playlist = lists.find { it.id == playlistId } ?: return
         if (playlist.songIds.contains(song.id)) {
-            Toast.makeText(activity, "Already in this playlist", Toast.LENGTH_SHORT).show()
+            Toast.makeText(
+                activity,
+                activity.getString(com.musicplayer.app.R.string.already_in_playlist),
+                Toast.LENGTH_SHORT
+            ).show()
             return
         }
         playlist.songIds.add(song.id)
         PlaylistStore.save(activity, lists)
-        Toast.makeText(activity, "Added to ${playlist.name}", Toast.LENGTH_SHORT).show()
+        Toast.makeText(
+            activity,
+            activity.getString(com.musicplayer.app.R.string.added_to_playlist, playlist.name),
+            Toast.LENGTH_SHORT
+        ).show()
     }
 }

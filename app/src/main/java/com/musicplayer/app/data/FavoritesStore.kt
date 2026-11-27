@@ -40,6 +40,22 @@ object FavoritesStore {
 
     fun getFavorites(context: Context): Set<Long> = all(context)
 
+    /** Replaces the whole favorite set (used by backup restore). */
+    fun setFavorites(context: Context, songs: List<Song>) {
+        try {
+            val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            prefs.edit()
+                .putStringSet(KEY, songs.map { it.id.toString() }.toSet())
+                .apply()
+        } catch (e: Exception) {
+            ErrorReporter.log(
+                ErrorReporter.TYPE_DATABASE,
+                "Favorites save failed: ${e.message}",
+                e
+            )
+        }
+    }
+
     fun addFavorite(context: Context, songId: Long) {
         try {
             val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)

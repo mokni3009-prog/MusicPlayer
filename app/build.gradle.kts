@@ -11,11 +11,22 @@ android {
         applicationId = "com.musicplayer.app"
         minSdk = 26
         targetSdk = 34
-        versionCode = 4
-        versionName = "1.0.3"
+        versionCode = 5
+        versionName = "1.0.4"
     }
 
     buildToolsVersion = "34.0.0"
+
+    // libVLC ships native libraries for every ABI — split the APK per ABI
+    // so each device downloads only its own native code.
+    splits {
+        abi {
+            isEnable = true
+            reset()
+            include("armeabi-v7a", "arm64-v8a", "x86", "x86_64")
+            isUniversalApk = false
+        }
+    }
 
     signingConfigs {
         create("release") {
@@ -66,6 +77,7 @@ dependencies {
     implementation("androidx.activity:activity-ktx:1.9.3")
     implementation("androidx.fragment:fragment-ktx:1.8.5")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.7")
+    implementation("com.google.guava:guava:32.1.2-android")
 
     // Media3 — local audio playback + media session (background playback + notification)
     // NOTE: 1.4.1 is the newest Media3 that compiles against compileSdk 34.
@@ -73,4 +85,12 @@ dependencies {
     implementation("androidx.media3:media3-exoplayer:1.4.1")
     implementation("androidx.media3:media3-session:1.4.1")
     implementation("androidx.media3:media3-common:1.4.1")
+
+    // libVLC — secondary engine for rare audio formats Media3 cannot read
+    // (APE, DSD, WavPack, MPC, tracker, WMA...). Media3 stays the primary
+    // engine; VLC is used only as a fallback, switched automatically.
+    implementation("org.videolan.android:libvlc-all:3.7.8")
+
+    // jaudiotagger — batch tag editing (title/artist/album/genre/year/cover)
+    implementation("net.jthink:jaudiotagger:3.0.1")
 }

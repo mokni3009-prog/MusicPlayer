@@ -1,9 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- Full player — Zeno Play v1.0.4. Rotating circular cover, live visualizer,
+     transport (-10s, shuffle, prev, play, next, repeat), volume 0-200% + BOOST,
+     speed, sleep timer, A-B repeat, play-once, synced lyrics, reorderable queue. -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:layoutDirection="rtl"
     android:background="@drawable/bg_app"
     android:orientation="vertical">
 
@@ -44,6 +46,20 @@
             android:src="@drawable/ic_heart"
             android:tint="@color/zeno_ink3" />
 
+        <TextView
+            android:id="@+id/sleepButton"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:background="@drawable/bg_chip"
+            android:paddingStart="12dp"
+            android:paddingTop="8dp"
+            android:paddingEnd="12dp"
+            android:paddingBottom="8dp"
+            android:text="@string/sleep_timer"
+            android:textColor="@color/zeno_ink"
+            android:textSize="13sp"
+            android:textStyle="bold" />
+
     </LinearLayout>
 
     <ScrollView
@@ -62,40 +78,53 @@
             android:paddingEnd="24dp"
             android:paddingBottom="24dp">
 
-            <com.google.android.material.card.MaterialCardView
-                android:id="@+id/discCard"
-                android:layout_width="240dp"
-                android:layout_height="240dp"
-                app:cardCornerRadius="28dp"
-                app:cardElevation="0dp"
-                app:strokeColor="#FFD76A"
-                app:strokeWidth="1dp">
-
-                <ImageView
-                    android:id="@+id/discArt"
-                    android:layout_width="match_parent"
-                    android:layout_height="match_parent"
-                    android:scaleType="centerCrop"
-                    android:src="@drawable/zeno_logo" />
-
-            </com.google.android.material.card.MaterialCardView>
-
-            <com.musicplayer.app.ui.VisualizerView
-                android:id="@+id/visualizerView"
+            <!-- Circular smoke ring around the disc (gold->cyan mist,
+                 driven by the real FFT; replaces the old straight bars). -->
+            <FrameLayout
                 android:layout_width="match_parent"
-                android:layout_height="64dp"
-                android:layout_marginTop="20dp" />
+                android:layout_height="300dp"
+                android:layout_marginTop="6dp">
+
+                <com.musicplayer.app.ui.SmokeVisualizerView
+                    android:id="@+id/smokeView"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent" />
+
+                <com.google.android.material.card.MaterialCardView
+                    android:id="@+id/discCard"
+                    android:layout_width="220dp"
+                    android:layout_height="220dp"
+                    android:layout_gravity="center"
+                    app:cardCornerRadius="110dp"
+                    app:cardElevation="0dp"
+                    app:strokeColor="#FFD76A"
+                    app:strokeWidth="1dp">
+
+                    <ImageView
+                        android:id="@+id/discArt"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:scaleType="fitCenter"
+                        android:src="@drawable/zeno_logo_transparent" />
+
+                </com.google.android.material.card.MaterialCardView>
+
+            </FrameLayout>
 
             <TextView
                 android:id="@+id/songTitle"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="12dp"
-                android:ellipsize="end"
+                android:ellipsize="marquee"
                 android:gravity="center"
-                android:maxLines="2"
+                android:marqueeRepeatLimit="marquee_forever"
+                android:scrollHorizontally="true"
+                android:selected="true"
+                android:singleLine="true"
                 android:text="@string/no_song"
                 android:textColor="@color/zeno_ink"
+                android:textDirection="firstStrong"
                 android:textSize="27sp"
                 android:textStyle="bold" />
 
@@ -221,10 +250,106 @@
 
             </LinearLayout>
 
+            <!-- Tools row: -10s, speed, A-B, play once -->
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="10dp"
+                android:layout_marginTop="14dp"
+                android:gravity="center"
+                android:orientation="horizontal">
+
+                <TextView
+                    android:id="@+id/minus10Button"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginEnd="8dp"
+                    android:background="@drawable/bg_chip"
+                    android:paddingStart="12dp"
+                    android:paddingTop="8dp"
+                    android:paddingEnd="12dp"
+                    android:paddingBottom="8dp"
+                    android:text="@string/minus_10s"
+                    android:textColor="@color/zeno_ink"
+                    android:textSize="13sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/speedButton"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginEnd="8dp"
+                    android:background="@drawable/bg_chip"
+                    android:paddingStart="12dp"
+                    android:paddingTop="8dp"
+                    android:paddingEnd="12dp"
+                    android:paddingBottom="8dp"
+                    android:text="1.0×"
+                    android:textColor="@color/zeno_ink"
+                    android:textSize="13sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/abAButton"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginEnd="4dp"
+                    android:background="@drawable/bg_chip"
+                    android:paddingStart="12dp"
+                    android:paddingTop="8dp"
+                    android:paddingEnd="12dp"
+                    android:paddingBottom="8dp"
+                    android:text="A"
+                    android:textColor="@color/zeno_ink"
+                    android:textSize="13sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/abBButton"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginEnd="8dp"
+                    android:background="@drawable/bg_chip"
+                    android:paddingStart="12dp"
+                    android:paddingTop="8dp"
+                    android:paddingEnd="12dp"
+                    android:paddingBottom="8dp"
+                    android:text="B"
+                    android:textColor="@color/zeno_ink"
+                    android:textSize="13sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/playOnceButton"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:background="@drawable/bg_chip"
+                    android:paddingStart="12dp"
+                    android:paddingTop="8dp"
+                    android:paddingEnd="12dp"
+                    android:paddingBottom="8dp"
+                    android:text="@string/play_once_then_next"
+                    android:textColor="@color/zeno_ink"
+                    android:textSize="13sp"
+                    android:textStyle="bold" />
+
+            </LinearLayout>
+
+            <TextView
+                android:id="@+id/abStatus"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:gravity="center"
+                android:textColor="@color/zeno_cyan"
+                android:textSize="13sp"
+                android:textStyle="bold"
+                android:visibility="gone" />
+
+            <!-- Volume 0-200% -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="14dp"
                 android:gravity="center_vertical"
                 android:orientation="horizontal">
 
@@ -239,17 +364,45 @@
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
-                    android:max="100"
+                    android:max="200"
                     android:progress="80"
                     android:progressDrawable="@drawable/seek_progress"
                     android:thumb="@drawable/seek_thumb" />
 
+                <TextView
+                    android:id="@+id/volumeValue"
+                    android:layout_width="52dp"
+                    android:layout_height="wrap_content"
+                    android:gravity="end"
+                    android:text="80%"
+                    android:textColor="@color/zeno_ink2"
+                    android:textSize="13sp"
+                    android:textStyle="bold" />
+
             </LinearLayout>
 
+            <TextView
+                android:id="@+id/boostBadge"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="end"
+                android:background="@drawable/bg_boost_badge"
+                android:paddingStart="10dp"
+                android:paddingTop="4dp"
+                android:paddingEnd="10dp"
+                android:paddingBottom="4dp"
+                android:text="BOOST +0%"
+                android:textColor="@color/zeno_on_gradient"
+                android:textSize="12sp"
+                android:textStyle="bold"
+                android:visibility="gone" />
+
+            <!-- Actions row -->
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="16dp"
+                android:gravity="center"
                 android:orientation="horizontal">
 
                 <ImageButton
@@ -261,16 +414,124 @@
                     android:src="@drawable/ic_add"
                     android:tint="@color/zeno_ink" />
 
+                <ImageButton
+                    android:id="@+id/eqButton"
+                    android:layout_width="48dp"
+                    android:layout_height="48dp"
+                    android:background="?attr/selectableItemBackgroundBorderless"
+                    android:contentDescription="@string/equalizer"
+                    android:src="@drawable/ic_equalizer"
+                    android:tint="@color/zeno_ink" />
+
+                <ImageButton
+                    android:id="@+id/ringtoneButton"
+                    android:layout_width="48dp"
+                    android:layout_height="48dp"
+                    android:background="?attr/selectableItemBackgroundBorderless"
+                    android:contentDescription="@string/create_ringtone"
+                    android:src="@drawable/ic_ringtone"
+                    android:tint="@color/zeno_ink" />
+
+                <ImageButton
+                    android:id="@+id/tagsButton"
+                    android:layout_width="48dp"
+                    android:layout_height="48dp"
+                    android:background="?attr/selectableItemBackgroundBorderless"
+                    android:contentDescription="@string/edit_tags"
+                    android:src="@drawable/ic_tag"
+                    android:tint="@color/zeno_ink" />
+
             </LinearLayout>
 
+            <!-- Synced lyrics -->
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="26dp"
-                android:text="@string/up_next"
+                android:text="@string/lyrics"
                 android:textColor="@color/zeno_ink"
                 android:textSize="17sp"
                 android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/lyricsStatus"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:text="@string/lyrics_none"
+                android:textColor="@color/zeno_ink2"
+                android:textSize="14sp" />
+
+            <androidx.recyclerview.widget.RecyclerView
+                android:id="@+id/lyricsRecycler"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:nestedScrollingEnabled="false" />
+
+            <TextView
+                android:id="@+id/lyricsSearchOnline"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:background="@drawable/bg_chip"
+                android:paddingStart="12dp"
+                android:paddingTop="8dp"
+                android:paddingEnd="12dp"
+                android:paddingBottom="8dp"
+                android:text="@string/lyrics_search_online"
+                android:textColor="@color/zeno_cyan"
+                android:textSize="13sp"
+                android:textStyle="bold"
+                android:visibility="gone" />
+
+            <!-- Queue -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="26dp"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="@string/up_next"
+                    android:textColor="@color/zeno_ink"
+                    android:textSize="17sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/saveQueueButton"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:background="@drawable/bg_chip"
+                    android:paddingStart="12dp"
+                    android:paddingTop="8dp"
+                    android:paddingEnd="12dp"
+                    android:paddingBottom="8dp"
+                    android:text="@string/save_queue"
+                    android:textColor="@color/zeno_cyan"
+                    android:textSize="13sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/queuesButton"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="8dp"
+                    android:background="@drawable/bg_chip"
+                    android:paddingStart="12dp"
+                    android:paddingTop="8dp"
+                    android:paddingEnd="12dp"
+                    android:paddingBottom="8dp"
+                    android:text="@string/my_queues"
+                    android:textColor="@color/zeno_cyan"
+                    android:textSize="13sp"
+                    android:textStyle="bold" />
+
+            </LinearLayout>
 
             <androidx.recyclerview.widget.RecyclerView
                 android:id="@+id/queueRecycler"

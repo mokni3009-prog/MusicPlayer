@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Diagonal light band that sweeps across the splash logo.
+     Angle 45 is a multiple of 45, so the gradient-angle guard is satisfied. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <gradient
+        android:angle="45"
+        android:startColor="#00FFFFFF"
+        android:centerColor="#59FFFFFF"
+        android:endColor="#00FFFFFF" />
+</shape>

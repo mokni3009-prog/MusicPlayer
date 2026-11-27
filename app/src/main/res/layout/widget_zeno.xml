@@ -1,0 +1,79 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Home-screen widget: cover + title/artist + prev / play-pause / next.
+     Tapping the cover/title opens the library (widgetOpen). -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/widgetOpen"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:background="@drawable/bg_mini_player"
+    android:gravity="center_vertical"
+    android:orientation="horizontal"
+    android:padding="10dp">
+
+    <ImageView
+        android:id="@+id/widgetCover"
+        android:layout_width="48dp"
+        android:layout_height="48dp"
+        android:scaleType="centerCrop"
+        android:src="@drawable/zeno_logo_mark" />
+
+    <LinearLayout
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:orientation="vertical"
+        android:paddingStart="10dp"
+        android:paddingEnd="6dp">
+
+        <TextView
+            android:id="@+id/widgetTitle"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:ellipsize="end"
+            android:maxLines="1"
+            android:text="@string/no_song"
+            android:textColor="@color/zeno_ink"
+            android:textSize="14sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/widgetArtist"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:ellipsize="end"
+            android:maxLines="1"
+            android:text="@string/from_device"
+            android:textColor="@color/zeno_ink2"
+            android:textSize="12sp" />
+
+    </LinearLayout>
+
+    <ImageButton
+        android:id="@+id/widgetPrev"
+        android:layout_width="40dp"
+        android:layout_height="40dp"
+        android:background="@null"
+        android:contentDescription="@string/previous"
+        android:src="@drawable/ic_previous"
+        android:tint="@color/zeno_ink" />
+
+    <ImageButton
+        android:id="@+id/widgetPlayPause"
+        android:layout_width="48dp"
+        android:layout_height="48dp"
+        android:background="@drawable/bg_play_btn"
+        android:contentDescription="@string/play"
+        android:padding="12dp"
+        android:src="@drawable/ic_play"
+        android:tint="@color/zeno_on_gradient" />
+
+    <ImageButton
+        android:id="@+id/widgetNext"
+        android:layout_width="40dp"
+        android:layout_height="40dp"
+        android:background="@null"
+        android:contentDescription="@string/next"
+        android:src="@drawable/ic_next"
+        android:tint="@color/zeno_ink" />
+
+</LinearLayout>
