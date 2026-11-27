@@ -2,6 +2,10 @@ package com.musicplayer.app.player
 
 import android.content.Context
 import android.media.audiofx.Visualizer
+import android.os.Handler
+import android.os.Looper
+import android.widget.Toast
+import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.common.TrackSelectionParameters
 import androidx.media3.exoplayer.DefaultRenderersFactory
@@ -29,6 +33,9 @@ class PlaybackService : MediaSessionService() {
     private var visualizer: Visualizer? = null
     private val spectrumProcessor = SpectrumAudioProcessor()
 
+    /** True once we already fell back to the plain player — never retry twice. */
+    private var fallbackActive = false
+
     private val playerListener = object : Player.Listener {
         override fun onAudioSessionIdChanged(audioSessionId: Int) {
             setupVisualizer(audioSessionId)
@@ -39,6 +46,54 @@ class PlaybackService : MediaSessionService() {
             if (!isPlaying) {
                 VisualizerHub.publishSilence()
             }
+        }
+
+        override fun onPlayerError(error: PlaybackException) {
+            // v1.0.1 regression: the custom renderers factory / audio processor
+            // can leave the song loaded but never playing. Fall back to a
+            // plain default ExoPlayer (no custom audio processors, default
+            // offload behaviour) and retry the same queue/position.
+            if (!fallbackActive) {
+                fallbackActive = true
+                rebuildWithPlainPlayer()
+            }
+        }
+    }
+
+    /**
+     * Rebuilds the player with plain defaults and retries playback from the
+     * same queue and position. The media session is rebuilt too, so connected
+     * controllers get onDisconnected and reconnect (see MainActivity /
+     * PlayerActivity controller listeners).
+     */
+    private fun rebuildWithPlainPlayer() {
+        val old = player ?: return
+        val items = (0 until old.mediaItemCount).map { old.getMediaItemAt(it) }
+        val index = old.currentMediaItemIndex.coerceAtLeast(0)
+        val position = old.currentPosition
+        val shuffle = old.shuffleModeEnabled
+        val repeat = old.repeatMode
+        old.removeListener(playerListener)
+        session?.release()
+        old.release()
+        releaseVisualizer()
+        player = ExoPlayer.Builder(this).build()
+        val plain = player!!
+        plain.addListener(playerListener)
+        if (items.isNotEmpty()) {
+            plain.setMediaItems(items, index, position)
+            plain.shuffleModeEnabled = shuffle
+            plain.repeatMode = repeat
+            plain.prepare()
+            plain.play()
+        }
+        session = MediaSession.Builder(this, plain).build()
+        Handler(Looper.getMainLooper()).post {
+            Toast.makeText(
+                applicationContext,
+                "حدث خطأ في التشغيل — أعدنا المحاولة بمشغّل احتياطي",
+                Toast.LENGTH_LONG
+            ).show()
         }
     }
 

@@ -30,21 +30,42 @@ jobs:
           yes | "$SDKMANAGER" --licenses
           "$SDKMANAGER" "platforms;android-34" "build-tools;34.0.0" "platform-tools"
 
-      - name: Build debug APK
+      - name: Decode release keystore
+        run: |
+          echo "${{ secrets.RELEASE_KEYSTORE_BASE64 }}" | base64 -d > release.p12
+          echo "RELEASE_KEYSTORE_PATH=$PWD/release.p12" >> $GITHUB_ENV
+        env:
+          RELEASE_KEYSTORE_PASSWORD: ${{ secrets.RELEASE_KEYSTORE_PASSWORD }}
+          RELEASE_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
+          RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
+
+      - name: Build release APK
         run: |
           chmod +x gradlew
-          ./gradlew assembleDebug --stacktrace
+          ./gradlew assembleRelease --stacktrace
+        env:
+          RELEASE_KEYSTORE_PASSWORD: ${{ secrets.RELEASE_KEYSTORE_PASSWORD }}
+          RELEASE_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
+          RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: music-player-debug-apk
-          path: app/build/outputs/apk/debug/app-debug.apk
+          name: zeno-play-release-apk
+          path: app/build/outputs/apk/release/app-release.apk
 
       - name: Publish release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v1.0.1
-          name: Music Player v1.0.1 (debug)
-          body: 'Fix: sound waves now read the real audio (PCM spectrum via an in-app audio processor) so they show on every phone; the visualizer area is always visible (minimum bars + baseline) with an animated fallback.'
-          files: app/build/outputs/apk/debug/app-debug.apk
+          tag_name: v1.0.2
+          name: Zeno Play v1.0.2
+          body: |
+            Zeno Play v1.0.2 — release build (signed with the permanent release key).
+
+            - Approved prototype UI applied natively: library with search and categories (تونسي / شرقي / أجنبي / مفضلة / من جهازي), playlists grid, now-playing card with rotating disc and live waves, full player with "Up next" queue, mini player bar.
+            - Rebranded to Zeno Play: dark navy + gold-to-cyan gradient identity, launcher icon from the Zeno logo, gradient visualizer bars.
+            - Fixed the v1.0.1 playback regression: on a player error the app retries with a plain default ExoPlayer as a fallback.
+            - In-app updates from GitHub: the app checks the latest release, downloads and installs it itself (no uninstall, no manual download).
+
+            IMPORTANT: this release is signed with a new release key (v1.0.0/v1.0.1 were debug-signed), so uninstall the old app once and install v1.0.2 fresh. After that, updates — including in-app updates — install normally.
+          files: app/build/outputs/apk/release/app-release.apk

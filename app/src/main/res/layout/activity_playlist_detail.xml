@@ -3,14 +3,16 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
+    android:layoutDirection="rtl"
+    android:background="@drawable/bg_app"
     android:orientation="vertical">
 
     <androidx.appcompat.widget.Toolbar
         android:id="@+id/toolbar"
         android:layout_width="match_parent"
         android:layout_height="?attr/actionBarSize"
-        android:background="?attr/colorPrimary"
-        app:titleTextColor="@color/md_theme_onPrimary" />
+        android:background="@color/zeno_bg2"
+        app:titleTextColor="@color/zeno_ink" />
 
     <FrameLayout
         android:layout_width="match_parent"
@@ -20,7 +22,9 @@
         <androidx.recyclerview.widget.RecyclerView
             android:id="@+id/songsRecycler"
             android:layout_width="match_parent"
-            android:layout_height="match_parent" />
+            android:layout_height="match_parent"
+            android:paddingStart="8dp"
+            android:paddingEnd="8dp" />
 
         <TextView
             android:id="@+id/emptyText"
@@ -28,6 +32,7 @@
             android:layout_height="wrap_content"
             android:layout_gravity="center"
             android:text="@string/no_songs_found"
+            android:textColor="@color/zeno_ink2"
             android:textSize="16sp"
             android:visibility="gone" />
 
@@ -38,6 +43,8 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_margin="16dp"
-        android:text="@string/add_songs" />
+        android:text="@string/add_songs"
+        android:textColor="@color/zeno_on_gradient"
+        app:backgroundTint="@color/zeno_cyan" />
 
 </LinearLayout>

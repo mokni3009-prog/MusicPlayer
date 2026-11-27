@@ -8,4 +8,7 @@
 /captures
 *.apk
 *.aab
+*.jks
+*.keystore
+release.keystore
 app/build/

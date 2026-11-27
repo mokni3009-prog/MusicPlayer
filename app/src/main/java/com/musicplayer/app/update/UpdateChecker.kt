@@ -1,0 +1,140 @@
+package com.musicplayer.app.update
+
+import android.app.PendingIntent
+import android.content.Context
+import android.content.Intent
+import android.content.pm.PackageInstaller
+import android.os.Build
+import android.util.Log
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import org.json.JSONObject
+import java.io.File
+import java.io.FileOutputStream
+import java.net.HttpURLConnection
+import java.net.URL
+
+data class ReleaseInfo(
+    val tag: String,
+    val versionName: String,
+    val apkUrl: String,
+    val body: String?
+)
+
+/**
+ * In-app updates from GitHub: checks the latest release, downloads the APK
+ * and installs it with PackageInstaller — no uninstall, no manual download.
+ */
+object UpdateChecker {
+    private const val TAG = "UpdateChecker"
+    private const val OWNER = "mokni3009-prog"
+    private const val REPO = "MusicPlayer"
+
+    /** True when [latest] (e.g. "v1.0.3") is newer than [current] (e.g. "1.0.2"). */
+    fun isNewer(latest: String, current: String): Boolean {
+        val l = latest.trimStart('v', 'V').split(".").map { it.toIntOrNull() ?: 0 }
+        val c = current.trimStart('v', 'V').split(".").map { it.toIntOrNull() ?: 0 }
+        val n = maxOf(l.size, c.size)
+        for (i in 0 until n) {
+            val a = l.getOrElse(i) { 0 }
+            val b = c.getOrElse(i) { 0 }
+            if (a != b) return a > b
+        }
+        return false
+    }
+
+    suspend fun fetchLatest(): ReleaseInfo? = withContext(Dispatchers.IO) {
+        try {
+            val url = URL("https://api.github.com/repos/$OWNER/$REPO/releases/latest")
+            val conn = url.openConnection() as HttpURLConnection
+            conn.setRequestProperty("Accept", "application/vnd.github+json")
+            conn.connectTimeout = 10000
+            conn.readTimeout = 10000
+            if (conn.responseCode != 200) {
+                Log.w(TAG, "releases API: ${conn.responseCode}")
+                return@withContext null
+            }
+            val json = JSONObject(conn.inputStream.bufferedReader().readText())
+            val tag = json.optString("tag_name", "")
+            if (tag.isBlank()) return@withContext null
+            val assets = json.optJSONArray("assets")
+            var apkUrl: String? = null
+            if (assets != null) {
+                for (i in 0 until assets.length()) {
+                    val a = assets.getJSONObject(i)
+                    if (a.optString("name").endsWith(".apk")) {
+                        apkUrl = a.optString("browser_download_url")
+                        break
+                    }
+                }
+            }
+            if (apkUrl.isNullOrBlank()) return@withContext null
+            ReleaseInfo(tag, tag.trimStart('v', 'V'), apkUrl, json.optString("body", null))
+        } catch (e: Exception) {
+            Log.w(TAG, "fetchLatest failed", e)
+            null
+        }
+    }
+
+    suspend fun downloadApk(
+        context: Context,
+        url: String,
+        onProgress: (Int) -> Unit
+    ): File? = withContext(Dispatchers.IO) {
+        try {
+            val conn = URL(url).openConnection() as HttpURLConnection
+            conn.connectTimeout = 15000
+            conn.readTimeout = 30000
+            conn.setRequestProperty("Accept", "application/vnd.android.package-archive")
+            if (conn.responseCode != 200) {
+                Log.w(TAG, "download: HTTP ${conn.responseCode}")
+                return@withContext null
+            }
+            val total = conn.contentLengthLong
+            val outFile = File(context.cacheDir, "zeno-play-update.apk")
+            conn.inputStream.use { input ->
+                FileOutputStream(outFile).use { out ->
+                    val buf = ByteArray(8192)
+                    var read: Int
+                    var downloaded = 0L
+                    while (input.read(buf).also { read = it } != -1) {
+                        out.write(buf, 0, read)
+                        downloaded += read
+                        if (total > 0) onProgress(((downloaded * 100) / total).toInt())
+                    }
+                }
+            }
+            outFile
+        } catch (e: Exception) {
+            Log.w(TAG, "downloadApk failed", e)
+            null
+        }
+    }
+
+    /** Installs the downloaded APK with PackageInstaller (no uninstall, no manual step). */
+    fun installApk(context: Context, apkFile: File): Boolean {
+        return try {
+            val installer = context.packageManager.packageInstaller
+            val params = PackageInstaller.SessionParams(PackageInstaller.SessionParams.MODE_FULL_INSTALL)
+            val sessionId = installer.createSession(params)
+            val session = installer.openSession(sessionId)
+            apkFile.inputStream().use { input ->
+                session.openWrite("package", 0, apkFile.length()).use { out ->
+                    input.copyTo(out)
+                }
+            }
+            val intent = Intent(context, UpdateInstallReceiver::class.java)
+            val pi = PendingIntent.getBroadcast(
+                context, sessionId, intent,
+                PendingIntent.FLAG_UPDATE_CURRENT or
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) PendingIntent.FLAG_MUTABLE else 0
+            )
+            session.commit(pi.intentSender)
+            session.close()
+            true
+        } catch (e: Exception) {
+            Log.w(TAG, "installApk failed", e)
+            false
+        }
+    }
+}

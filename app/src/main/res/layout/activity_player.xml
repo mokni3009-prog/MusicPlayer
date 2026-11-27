@@ -3,15 +3,48 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
+    android:layoutDirection="rtl"
+    android:background="@drawable/bg_app"
     android:orientation="vertical">
 
-    <androidx.appcompat.widget.Toolbar
-        android:id="@+id/toolbar"
+    <LinearLayout
         android:layout_width="match_parent"
-        android:layout_height="?attr/actionBarSize"
-        android:background="?attr/colorPrimary"
-        app:title="@string/app_name"
-        app:titleTextColor="@color/md_theme_onPrimary" />
+        android:layout_height="wrap_content"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingStart="8dp"
+        android:paddingTop="8dp"
+        android:paddingEnd="8dp">
+
+        <ImageButton
+            android:id="@+id/backButton"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:contentDescription="@string/back"
+            android:src="@drawable/ic_back"
+            android:tint="@color/zeno_ink" />
+
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:gravity="center"
+            android:text="@string/now_playing"
+            android:textColor="@color/zeno_ink2"
+            android:textSize="15sp"
+            android:textStyle="bold" />
+
+        <ImageButton
+            android:id="@+id/favButton"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:contentDescription="@string/favorite"
+            android:src="@drawable/ic_heart"
+            android:tint="@color/zeno_ink3" />
+
+    </LinearLayout>
 
     <ScrollView
         android:layout_width="match_parent"
@@ -24,48 +57,64 @@
             android:layout_height="wrap_content"
             android:gravity="center_horizontal"
             android:orientation="vertical"
-            android:padding="24dp">
+            android:paddingStart="24dp"
+            android:paddingTop="10dp"
+            android:paddingEnd="24dp"
+            android:paddingBottom="24dp">
 
-            <ImageView
+            <com.google.android.material.card.MaterialCardView
+                android:id="@+id/discCard"
                 android:layout_width="240dp"
                 android:layout_height="240dp"
-                android:background="@color/album_placeholder_background"
-                android:padding="64dp"
-                android:src="@drawable/ic_music"
-                android:tint="@color/md_theme_primary" />
+                app:cardCornerRadius="28dp"
+                app:cardElevation="0dp"
+                app:strokeColor="#FFD76A"
+                app:strokeWidth="1dp">
+
+                <ImageView
+                    android:id="@+id/discArt"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:scaleType="centerCrop"
+                    android:src="@drawable/zeno_logo" />
+
+            </com.google.android.material.card.MaterialCardView>
 
             <com.musicplayer.app.ui.VisualizerView
                 android:id="@+id/visualizerView"
                 android:layout_width="match_parent"
-                android:layout_height="72dp"
-                android:layout_marginTop="16dp" />
+                android:layout_height="64dp"
+                android:layout_marginTop="20dp" />
 
             <TextView
                 android:id="@+id/songTitle"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="24dp"
+                android:layout_marginTop="12dp"
                 android:ellipsize="end"
                 android:gravity="center"
                 android:maxLines="2"
                 android:text="@string/no_song"
-                android:textSize="22sp"
+                android:textColor="@color/zeno_ink"
+                android:textSize="27sp"
                 android:textStyle="bold" />
 
             <TextView
                 android:id="@+id/songArtist"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="8dp"
                 android:ellipsize="end"
                 android:gravity="center"
                 android:maxLines="1"
-                android:textSize="16sp" />
+                android:text="@string/from_device"
+                android:textColor="@color/zeno_ink2"
+                android:textSize="16sp"
+                android:textStyle="bold" />
 
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="32dp"
+                android:layout_marginTop="18dp"
                 android:gravity="center_vertical"
                 android:orientation="horizontal">
 
@@ -74,13 +123,17 @@
                     android:layout_width="48dp"
                     android:layout_height="wrap_content"
                     android:text="0:00"
-                    android:textSize="13sp" />
+                    android:textColor="@color/zeno_ink2"
+                    android:textSize="13sp"
+                    android:textStyle="bold" />
 
                 <SeekBar
                     android:id="@+id/seekBar"
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
-                    android:layout_weight="1" />
+                    android:layout_weight="1"
+                    android:progressDrawable="@drawable/seek_progress"
+                    android:thumb="@drawable/seek_thumb" />
 
                 <TextView
                     android:id="@+id/totalTime"
@@ -88,50 +141,16 @@
                     android:layout_height="wrap_content"
                     android:gravity="end"
                     android:text="0:00"
-                    android:textSize="13sp" />
+                    android:textColor="@color/zeno_ink2"
+                    android:textSize="13sp"
+                    android:textStyle="bold" />
 
             </LinearLayout>
 
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="24dp"
-                android:gravity="center"
-                android:orientation="horizontal">
-
-                <ImageButton
-                    android:id="@+id/previousButton"
-                    android:layout_width="56dp"
-                    android:layout_height="56dp"
-                    android:background="?attr/selectableItemBackgroundBorderless"
-                    android:contentDescription="@string/previous"
-                    android:src="@drawable/ic_previous" />
-
-                <ImageButton
-                    android:id="@+id/playPauseButton"
-                    android:layout_width="80dp"
-                    android:layout_height="80dp"
-                    android:layout_marginStart="24dp"
-                    android:layout_marginEnd="24dp"
-                    android:background="@drawable/ic_launcher_background"
-                    android:contentDescription="@string/play"
-                    android:src="@drawable/ic_play"
-                    android:tint="@color/md_theme_onPrimary" />
-
-                <ImageButton
-                    android:id="@+id/nextButton"
-                    android:layout_width="56dp"
-                    android:layout_height="56dp"
-                    android:background="?attr/selectableItemBackgroundBorderless"
-                    android:contentDescription="@string/next"
-                    android:src="@drawable/ic_next" />
-
-            </LinearLayout>
-
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="24dp"
+                android:layout_marginTop="10dp"
                 android:gravity="center"
                 android:orientation="horizontal">
 
@@ -141,17 +160,38 @@
                     android:layout_height="48dp"
                     android:background="?attr/selectableItemBackgroundBorderless"
                     android:contentDescription="@string/shuffle"
-                    android:src="@drawable/ic_shuffle" />
+                    android:src="@drawable/ic_shuffle"
+                    android:tint="@color/zeno_ink2" />
 
                 <ImageButton
-                    android:id="@+id/addToPlaylistButton"
+                    android:id="@+id/previousButton"
                     android:layout_width="48dp"
                     android:layout_height="48dp"
-                    android:layout_marginStart="32dp"
-                    android:layout_marginEnd="32dp"
                     android:background="?attr/selectableItemBackgroundBorderless"
-                    android:contentDescription="@string/add_to_playlist"
-                    android:src="@drawable/ic_add" />
+                    android:contentDescription="@string/previous"
+                    android:src="@drawable/ic_previous"
+                    android:tint="@color/zeno_ink" />
+
+                <ImageButton
+                    android:id="@+id/playPauseButton"
+                    android:layout_width="74dp"
+                    android:layout_height="74dp"
+                    android:layout_marginStart="6dp"
+                    android:layout_marginEnd="6dp"
+                    android:background="@drawable/bg_play_btn"
+                    android:contentDescription="@string/play"
+                    android:padding="20dp"
+                    android:src="@drawable/ic_play"
+                    android:tint="@color/zeno_on_gradient" />
+
+                <ImageButton
+                    android:id="@+id/nextButton"
+                    android:layout_width="48dp"
+                    android:layout_height="48dp"
+                    android:background="?attr/selectableItemBackgroundBorderless"
+                    android:contentDescription="@string/next"
+                    android:src="@drawable/ic_next"
+                    android:tint="@color/zeno_ink" />
 
                 <FrameLayout
                     android:layout_width="48dp"
@@ -163,7 +203,8 @@
                         android:layout_height="48dp"
                         android:background="?attr/selectableItemBackgroundBorderless"
                         android:contentDescription="@string/repeat"
-                        android:src="@drawable/ic_repeat" />
+                        android:src="@drawable/ic_repeat"
+                        android:tint="@color/zeno_ink2" />
 
                     <TextView
                         android:id="@+id/repeatBadge"
@@ -171,7 +212,7 @@
                         android:layout_height="wrap_content"
                         android:layout_gravity="bottom|end"
                         android:text="1"
-                        android:textColor="@color/md_theme_primary"
+                        android:textColor="@color/zeno_cyan"
                         android:textSize="11sp"
                         android:textStyle="bold"
                         android:visibility="gone" />
@@ -179,6 +220,64 @@
                 </FrameLayout>
 
             </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <ImageView
+                    android:layout_width="22dp"
+                    android:layout_height="22dp"
+                    android:src="@drawable/ic_volume"
+                    android:tint="@color/zeno_cyan" />
+
+                <SeekBar
+                    android:id="@+id/volumeBar"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:max="100"
+                    android:progress="80"
+                    android:progressDrawable="@drawable/seek_progress"
+                    android:thumb="@drawable/seek_thumb" />
+
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="16dp"
+                android:orientation="horizontal">
+
+                <ImageButton
+                    android:id="@+id/addToPlaylistButton"
+                    android:layout_width="48dp"
+                    android:layout_height="48dp"
+                    android:background="?attr/selectableItemBackgroundBorderless"
+                    android:contentDescription="@string/add_to_playlist"
+                    android:src="@drawable/ic_add"
+                    android:tint="@color/zeno_ink" />
+
+            </LinearLayout>
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="26dp"
+                android:text="@string/up_next"
+                android:textColor="@color/zeno_ink"
+                android:textSize="17sp"
+                android:textStyle="bold" />
+
+            <androidx.recyclerview.widget.RecyclerView
+                android:id="@+id/queueRecycler"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:nestedScrollingEnabled="false" />
 
         </LinearLayout>
 

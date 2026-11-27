@@ -2,7 +2,9 @@ package com.musicplayer.app.ui
 
 import android.content.Context
 import android.graphics.Canvas
+import android.graphics.LinearGradient
 import android.graphics.Paint
+import android.graphics.Shader
 import android.os.SystemClock
 import android.util.AttributeSet
 import android.view.View
@@ -31,16 +33,28 @@ class VisualizerView @JvmOverloads constructor(
     private var simPhase = 0f
 
     private val barPaint = Paint().apply {
-        color = context.getColor(R.color.md_theme_primary)
         style = Paint.Style.FILL
         isAntiAlias = true
     }
 
     private val baselinePaint = Paint().apply {
-        color = context.getColor(R.color.md_theme_primary)
+        color = context.getColor(R.color.zeno_cyan)
         alpha = 90
         style = Paint.Style.FILL
         isAntiAlias = true
+    }
+
+    override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
+        super.onSizeChanged(w, h, oldw, oldh)
+        if (h > 0) {
+            // Gold at the bottom -> cyan at the top, like the Zeno Play identity.
+            barPaint.shader = LinearGradient(
+                0f, h.toFloat(), 0f, 0f,
+                context.getColor(R.color.zeno_gold),
+                context.getColor(R.color.zeno_cyan),
+                Shader.TileMode.CLAMP
+            )
+        }
     }
 
     private val density: Float get() = resources.displayMetrics.density

@@ -30,6 +30,7 @@ class SongAdapter(
         holder.binding.songTitle.text = song.title
         holder.binding.songSubtitle.text = "${song.artist} • ${song.album}"
         holder.binding.songDuration.text = formatDuration(song.durationMs)
+        holder.binding.coverView.setBackgroundResource(coverResFor(song))
         holder.binding.root.setOnClickListener { onClick(song, position) }
         holder.binding.moreButton.setOnClickListener { v ->
             val popup = PopupMenu(v.context, v)
@@ -74,6 +75,22 @@ class SongAdapter(
     }
 
     fun currentList(): List<Song> = songs
+
+    companion object {
+        private val COVERS = intArrayOf(
+            com.musicplayer.app.R.drawable.bg_cover_1,
+            com.musicplayer.app.R.drawable.bg_cover_2,
+            com.musicplayer.app.R.drawable.bg_cover_3,
+            com.musicplayer.app.R.drawable.bg_cover_4,
+            com.musicplayer.app.R.drawable.bg_cover_5,
+            com.musicplayer.app.R.drawable.bg_cover_6
+        )
+
+        fun coverResFor(song: Song): Int {
+            val idx = ((song.id % COVERS.size) + COVERS.size).toInt() % COVERS.size
+            return COVERS[idx]
+        }
+    }
 
     private fun formatDuration(ms: Long): String {
         val totalSeconds = ms / 1000

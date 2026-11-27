@@ -1,12 +1,30 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="md_theme_primary">#6750A4</color>
-    <color name="md_theme_onPrimary">#FFFFFF</color>
-    <color name="md_theme_primaryContainer">#EADDFF</color>
-    <color name="md_theme_secondary">#625B71</color>
-    <color name="md_theme_surface">#FFFBFE</color>
-    <color name="md_theme_onSurface">#1C1B1F</color>
-    <color name="mini_player_background">#1C1B1F</color>
-    <color name="mini_player_text">#FFFFFF</color>
-    <color name="album_placeholder_background">#EADDFF</color>
+    <!-- Zeno Play identity: dark navy + gold -> cyan neon gradient -->
+    <color name="zeno_bg">#060D21</color>
+    <color name="zeno_bg2">#0B1A3A</color>
+    <color name="zeno_surface">#0E1E42</color>
+    <color name="zeno_card">#0D1C3C</color>
+    <color name="zeno_ink">#F2F7FF</color>
+    <color name="zeno_ink2">#B9C9E2</color>
+    <color name="zeno_ink3">#7D92B5</color>
+    <color name="zeno_line">#22375E</color>
+    <color name="zeno_gold">#FFD76A</color>
+    <color name="zeno_gold2">#F5B93F</color>
+    <color name="zeno_cyan">#2DE2E6</color>
+    <color name="zeno_cyan2">#22A8F0</color>
+    <color name="zeno_green">#9BE15D</color>
+    <color name="zeno_on_gradient">#061224</color>
+    <color name="zeno_track_bg">#24FFFFFF</color>
+
+    <!-- Aliases kept for the Material theme attributes -->
+    <color name="md_theme_primary">#2DE2E6</color>
+    <color name="md_theme_onPrimary">#061224</color>
+    <color name="md_theme_primaryContainer">#0B1A3A</color>
+    <color name="md_theme_secondary">#FFD76A</color>
+    <color name="md_theme_surface">#0E1E42</color>
+    <color name="md_theme_onSurface">#F2F7FF</color>
+    <color name="mini_player_background">#071126</color>
+    <color name="mini_player_text">#F2F7FF</color>
+    <color name="album_placeholder_background">#0E1E42</color>
 </resources>
