@@ -49,7 +49,9 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.7")
 
     // Media3 — local audio playback + media session (background playback + notification)
-    implementation("androidx.media3:media3-exoplayer:1.11.1")
-    implementation("androidx.media3:media3-session:1.11.1")
-    implementation("androidx.media3:media3-common:1.11.1")
+    // NOTE: 1.4.1 is the newest Media3 that compiles against compileSdk 34.
+    // 1.5.0+ requires compileSdk 35, 1.11.x requires compileSdk 36.
+    implementation("androidx.media3:media3-exoplayer:1.4.1")
+    implementation("androidx.media3:media3-session:1.4.1")
+    implementation("androidx.media3:media3-common:1.4.1")
 }
