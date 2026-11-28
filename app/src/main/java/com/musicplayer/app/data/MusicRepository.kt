@@ -2,6 +2,8 @@ package com.musicplayer.app.data
 
 import android.content.ContentUris
 import android.content.Context
+import android.database.sqlite.SQLiteException
+import android.os.Build
 import android.provider.MediaStore
 import com.musicplayer.app.report.ErrorReporter
 import java.text.Normalizer
@@ -24,9 +26,27 @@ object MusicRepository {
 
     private fun loadSongsInner(context: Context): List<Song> {
         val genreBySongId = loadGenres(context)
-        val songs = mutableListOf<Song>()
-        val uri = MediaStore.Audio.Media.EXTERNAL_CONTENT_URI
-        val projection = arrayOf(
+        return try {
+            querySongs(context, genreBySongId, buildProjection())
+        } catch (e: SQLiteException) {
+            // A column may be missing on this device / Android version
+            // (e.g. bucket_display_name before API 29): retry with only the
+            // core columns so the library still loads instead of coming back
+            // empty. If even that fails, loadSongs() reports it.
+            querySongs(context, genreBySongId, MINIMAL_PROJECTION)
+        }
+    }
+
+    /**
+     * Columns for the library scan. bucket_display_name exists only from
+     * API 29 (Android 10): asking for it on Android 9 and below makes the
+     * whole query fail with "no such column: bucket_display_name" and the
+     * library comes back empty — so it is requested only where it exists.
+     * The folder name comes from that column when present, and from the
+     * file path (_data) when it is not.
+     */
+    private fun buildProjection(): Array<String> {
+        val projection = mutableListOf(
             MediaStore.Audio.Media._ID,
             MediaStore.Audio.Media.TITLE,
             MediaStore.Audio.Media.ARTIST,
@@ -35,10 +55,32 @@ object MusicRepository {
             MediaStore.Audio.Media.DURATION,
             MediaStore.Audio.Media.DISPLAY_NAME,
             MediaStore.Audio.Media.DATA,
-            MediaStore.Audio.Media.BUCKET_DISPLAY_NAME,
             MediaStore.Audio.Media.DATE_ADDED,
             MediaStore.Audio.Media.SIZE
         )
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            projection.add(MediaStore.Audio.Media.BUCKET_DISPLAY_NAME)
+        }
+        return projection.toTypedArray()
+    }
+
+    /** Core columns only — every one of them exists since API 1. */
+    private val MINIMAL_PROJECTION = arrayOf(
+        MediaStore.Audio.Media._ID,
+        MediaStore.Audio.Media.TITLE,
+        MediaStore.Audio.Media.ARTIST,
+        MediaStore.Audio.Media.ALBUM,
+        MediaStore.Audio.Media.ALBUM_ID,
+        MediaStore.Audio.Media.DURATION
+    )
+
+    private fun querySongs(
+        context: Context,
+        genreBySongId: Map<Long, String>,
+        projection: Array<String>
+    ): List<Song> {
+        val songs = mutableListOf<Song>()
+        val uri = MediaStore.Audio.Media.EXTERNAL_CONTENT_URI
         val selection = "${MediaStore.Audio.Media.IS_MUSIC} != 0"
         val sortOrder = "${MediaStore.Audio.Media.TITLE} COLLATE NOCASE ASC"
         context.contentResolver.query(uri, projection, selection, null, sortOrder)?.use { cursor ->
@@ -63,15 +105,16 @@ object MusicRepository {
                 val contentUri = ContentUris.withAppendedId(uri, id)
                 val genre = genreBySongId[id] ?: ""
                 val fileName = if (nameCol >= 0) cursor.getString(nameCol) ?: "" else ""
-                // Parent folder: from the file path when available, else the
-                // MediaStore bucket name (both are best-effort on Android 10+).
+                // Parent folder (DOSSIERS tab): the MediaStore bucket name
+                // when the column exists (API 29+), otherwise derived from
+                // the file path (_data) — both ways in the same code.
                 val dataPath = if (dataCol >= 0) cursor.getString(dataCol) else null
                 val folder = when {
+                    bucketCol >= 0 -> (cursor.getString(bucketCol) ?: "").ifBlank { "Stockage" }
                     !dataPath.isNullOrBlank() -> {
                         val parent = dataPath.substringBeforeLast('/', "")
                         parent.substringAfterLast('/', "").ifBlank { "Stockage" }
                     }
-                    bucketCol >= 0 -> cursor.getString(bucketCol) ?: "Stockage"
                     else -> "Stockage"
                 }
                 val dateAdded = if (addedCol >= 0) cursor.getLong(addedCol) else 0L

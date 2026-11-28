@@ -91,17 +91,14 @@ jobs:
       - name: Publish release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v1.0.4
-          name: Zeno Play v1.0.4
+          tag_name: v1.0.5
+          name: Zeno Play v1.0.5
           body: |
-            Zeno Play v1.0.4 — release build (signed with the permanent release key).
+            Zeno Play v1.0.5 — bugfix release (signed with the permanent release key).
 
-            - NEW interface: the approved French redesign — tabs CHANSONS / ALBUMS / ARTISTES / PLAYLISTS / DOSSIERS / PARAMÈTRES, rotating circular cover, mini player, notification preview. App name on one line. "Gratuit pour toujours · Sans publicité · Vie privée respectée — pour toujours" on the splash (3 seconds, animated logo).
-            - 24 features: no ads, uninterrupted playback, volume to 200% with BOOST, synced lyrics (LRCLIB, opt-in), Android Auto, folders + proper shuffle + reorderable queue, real 5-band EQ per output, batch tag editing, Gapless + ReplayGain + speed, all formats (Media3 + libVLC fallback, automatic), local backup + M3U, French/Arabic/English UI with Arabic/French metadata, live waves — now a circular smoke ring around the cover that breathes with the bass (the cover pulses with the beat), sleep timer, up to 20 saved queues, home-screen widget, smart playlists, listening stats, A–B repeat + play-once, ringtone cutter, AMOLED black, album-cover management, Chromecast (opt-in, off by default).
-            - Privacy first: no account, no tracking, no ads, no extra permissions. Internet only for in-app updates, error reports and the optional lyrics/Chromecast.
-            - The circular player now shows the song's REAL album cover; without a cover it shows the Zeno logo without any square frame. Same rule in the mini player and the song list.
-            - Contact us on WhatsApp from the settings screen.
-            - Four APKs (one per ABI) — download the one for your device (arm64-v8a for most phones); the in-app updater picks the right one automatically.
+            - FIXED: empty library on Android 9 and below — the MediaStore query asked for bucket_display_name, a column that only exists from API 29, so the whole scan failed and the library came back empty (0 chansons). The column is now requested only on API 29+, and the folder name is derived from the file path on older versions; both ways live in the same code, and if any column is still missing the scan retries with a minimal projection instead of returning empty.
+            - FIXED: playback crash ERROR_CODE_FAILED_RUNTIME_CHECK (1004) — the spectrum/gain audio processors could put() Media3's shared empty buffer into itself after a reset, which throws IllegalArgumentException and kills playback. Empty buffers are now skipped safely.
+            - No new features in this version.
 
-            Installs over v1.0.3 normally (same release key, no uninstall needed).
+            Installs over v1.0.4 normally (same release key, no uninstall needed).
           files: app/build/outputs/apk/release/*.apk

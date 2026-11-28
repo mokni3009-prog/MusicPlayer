@@ -56,8 +56,16 @@ class SpectrumAudioProcessor : BaseAudioProcessor() {
             analyse(copy)
         }
         // Pass the audio through unchanged.
-        val output = replaceOutputBuffer(inputBuffer.remaining())
-        output.put(inputBuffer)
+        val remaining = inputBuffer.remaining()
+        val output = replaceOutputBuffer(remaining)
+        // Never put() an empty buffer: after a reset, replaceOutputBuffer(0)
+        // returns Media3's shared EMPTY_BUFFER, and put()ing that buffer
+        // into itself throws IllegalArgumentException (src == this) — which
+        // kills playback with ERROR_CODE_FAILED_RUNTIME_CHECK (1004). With
+        // no data there is nothing to copy, so skip the put entirely.
+        if (remaining > 0) {
+            output.put(inputBuffer)
+        }
         output.flip()
     }
 

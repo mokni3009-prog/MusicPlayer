@@ -45,7 +45,13 @@ class GainAudioProcessor : BaseAudioProcessor() {
             (encoding != C.ENCODING_PCM_16BIT && encoding != C.ENCODING_PCM_FLOAT)
         ) {
             // No boost: pass through untouched.
-            output.put(inputBuffer)
+            // (Same EMPTY_BUFFER trap as SpectrumAudioProcessor: skip the
+            // put when there is nothing to copy, otherwise put()ing the
+            // shared empty buffer into itself throws IllegalArgumentException
+            // and kills playback with ERROR_CODE_FAILED_RUNTIME_CHECK.)
+            if (inputBuffer.remaining() > 0) {
+                output.put(inputBuffer)
+            }
             output.flip()
             return
         }
