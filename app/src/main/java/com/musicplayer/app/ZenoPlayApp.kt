@@ -3,6 +3,9 @@ package com.musicplayer.app
 import android.app.Application
 import android.content.Context
 import android.util.Log
+import com.musicplayer.app.data.PlaybackStateStore
+import com.musicplayer.app.player.SystemVolumeSync
+import com.musicplayer.app.player.VolumeBoost
 import com.musicplayer.app.report.ErrorReporter
 import com.musicplayer.app.ui.LocaleHelper
 
@@ -32,6 +35,19 @@ class ZenoPlayApp : Application() {
             ErrorReporter.flushPendingReports()
         } catch (e: Exception) {
             Log.w("ZenoPlayApp", "flushPendingReports failed", e)
+        }
+        try {
+            // v1.0.8: two-way sync between the volume slider and the device
+            // volume. The slider starts from the CURRENT device volume; a
+            // saved boost above 100% survives only while the device is
+            // still at max.
+            SystemVolumeSync.attach(this)
+            val saved = PlaybackStateStore.loadVolume(this)
+            val initial = SystemVolumeSync.initialPercent(saved)
+            VolumeBoost.setVolumePercent(initial)
+            PlaybackStateStore.saveVolume(this, initial)
+        } catch (e: Exception) {
+            Log.w("ZenoPlayApp", "SystemVolumeSync init failed", e)
         }
     }
 }

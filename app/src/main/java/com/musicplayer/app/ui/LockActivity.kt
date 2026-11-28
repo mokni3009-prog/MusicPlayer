@@ -77,13 +77,21 @@ class LockActivity : FullScreenActivity() {
         connectController()
     }
 
+    // v1.0.8: the slider follows the DEVICE volume (hardware keys,
+    // notification, Android Auto) — updated live via PlayerConnection.
+    private val volumeSyncListener: (Int) -> Unit = { percent ->
+        binding.volumeBar.progress = percent
+    }
+
     override fun onStart() {
         super.onStart()
+        PlayerConnection.addVolumeListener(volumeSyncListener)
         connectController()
     }
 
     override fun onStop() {
         super.onStop()
+        PlayerConnection.removeVolumeListener(volumeSyncListener)
         PlayerConnection.controller?.removeListener(playerListener)
     }
 

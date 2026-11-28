@@ -343,10 +343,12 @@ class PlayerActivity : FullScreenActivity() {
         }
         // Gyroscope tilt (luxury option).
         startGyro()
+        PlayerConnection.addVolumeListener(volumeSyncListener)
     }
 
     override fun onStop() {
         super.onStop()
+        PlayerConnection.removeVolumeListener(volumeSyncListener)
         VisualizerHub.listener = null
         PlayerConnection.controller?.removeListener(playerListener)
         handler.removeCallbacks(updateRunnable)
@@ -683,6 +685,13 @@ class PlayerActivity : FullScreenActivity() {
                 Haptics.beat(this)
             }
         }
+    }
+
+    // v1.0.8: the slider follows the DEVICE volume (hardware keys,
+    // notification, Android Auto) — updated live via PlayerConnection.
+    private val volumeSyncListener: (Int) -> Unit = { percent ->
+        binding.volumeBar.progress = percent
+        updateVolumeUi(percent)
     }
 
     // ---- Volume 0-200% ----

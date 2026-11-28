@@ -91,13 +91,15 @@ jobs:
       - name: Publish release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v1.0.7
-          name: Zeno Play v1.0.7
+          tag_name: v1.0.8
+          name: Zeno Play v1.0.8
           body: |
-            Zeno Play v1.0.7 — bugfix release (signed with the permanent release key).
+            Zeno Play v1.0.8 — one feature: the volume slider is now synced with the DEVICE volume, both ways (signed with the permanent release key).
 
-            - FIXED: the full player STILL crashed on open on some phones (NullPointerException in ChangeTransform.captureValues, Redmi Android 16). The v1.0.6 fix was incomplete: the MaterialContainerTransformSharedElementCallback tags the shared element with its snapshot view, and the container transform's capture swaps transitionValues.view to that detached snapshot — then the sibling ChangeTransform in the same set dereferenced its null parent. Root cause verified against the AOSP 16 + Material 1.12.0 sources. The shared-element set now runs ChangeTransform with reparent=false, which never touches the parent (the morph itself is still driven by the container transform + ChangeBounds + ChangeImageTransform, and all 22 motion styles still work).
-            - No new features in this version.
+            - NEW: the in-app volume slider (0..100%) now drives the device volume itself (AudioManager, STREAM_MUSIC) with the same square-law perceptual curve, so the feel is unchanged. Above 100% the device stays at max and the extra boost is internal (GainAudioProcessor / VLC + knee limiter), as before.
+            - NEW: the reverse direction — hardware volume keys, the notification and Android Auto change the device volume, and the slider in the app follows (ContentObserver on the system volume, with a loop guard so our own changes never echo back).
+            - NEW: on launch the slider starts from the current device volume; a saved boost above 100% survives only while the device is still at max.
+            - Unchanged: all v1.0.6 volume fixes (slider value restored after VLC -> ExoPlayer switches and after player rebuilds, per-output EQ, balance/mono, per-song volume/speed memory), sleep-timer fade and the music-alarm ramp (they now fade the device volume too).
 
-            Installs over v1.0.6 normally (same release key, no uninstall needed).
+            Installs over v1.0.7 normally (same release key, no uninstall needed).
           files: app/build/outputs/apk/release/*.apk

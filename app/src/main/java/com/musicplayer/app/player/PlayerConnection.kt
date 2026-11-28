@@ -239,9 +239,40 @@ object PlayerConnection {
     /** Volume 0..200 (100 = normal, above 100 = BOOST with limiter). */
     fun setVolumePercent(percent: Int, context: Context? = null) {
         VolumeBoost.setVolumePercent(percent)
+        // v1.0.8: the 0..100% slider drives the DEVICE volume (STREAM_MUSIC);
+        // above 100% the device stays at max and the boost is internal.
+        SystemVolumeSync.applySliderPercent(percent)
         controller?.volume = VolumeBoost.playerVolume() * sleepFadeFactor
-        VlcEngine.setVolume((percent * sleepFadeFactor).toInt())
+        VlcEngine.setVolume(VolumeBoost.vlcVolumePercent(percent, sleepFadeFactor))
         context?.let { PlaybackStateStore.saveVolume(it, percent) }
+    }
+
+    // ---- Volume sync with the device (v1.0.8) ---------------------------
+
+    /** UI listeners refreshed when the DEVICE volume changes externally. */
+    private val volumeListeners = mutableSetOf<(Int) -> Unit>()
+
+    fun addVolumeListener(listener: (Int) -> Unit) {
+        volumeListeners.add(listener)
+    }
+
+    fun removeVolumeListener(listener: (Int) -> Unit) {
+        volumeListeners.remove(listener)
+    }
+
+    /**
+     * The device volume changed outside the app (hardware keys,
+     * notification, Android Auto). Adopt it as the new slider value —
+     * internal players + saved value + UI follow, but the system volume is
+     * NOT written back (that would loop: observer -> set -> observer ...).
+     * Runs on the main thread (called from SystemVolumeSync's observer).
+     */
+    fun onSystemVolumeChanged(percent: Int) {
+        VolumeBoost.setVolumePercent(percent)
+        controller?.volume = VolumeBoost.playerVolume() * sleepFadeFactor
+        VlcEngine.setVolume(VolumeBoost.vlcVolumePercent(percent, sleepFadeFactor))
+        SystemVolumeSync.context()?.let { PlaybackStateStore.saveVolume(it, percent) }
+        volumeListeners.toList().forEach { it(percent) }
     }
 
     fun setSpeed(speed: Float, context: Context? = null) {

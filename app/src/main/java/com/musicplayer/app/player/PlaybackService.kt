@@ -193,7 +193,7 @@ class PlaybackService : MediaLibraryService() {
     private fun applyFadeFactor(factor: Float) {
         PlayerConnection.sleepFadeFactor = factor
         player?.volume = VolumeBoost.playerVolume() * factor
-        VlcEngine.setVolume((VolumeBoost.volumePercent * factor).toInt())
+        VlcEngine.setVolume(VolumeBoost.vlcVolumePercent(VolumeBoost.volumePercent, factor))
     }
 
     private fun stopForSleepTimer() {
@@ -438,7 +438,7 @@ class PlaybackService : MediaLibraryService() {
         try {
             player?.pause()
             vlcPlayingCurrent = true
-            VlcEngine.setVolume((VolumeBoost.volumePercent * PlayerConnection.sleepFadeFactor).toInt())
+            VlcEngine.setVolume(VolumeBoost.vlcVolumePercent(VolumeBoost.volumePercent, PlayerConnection.sleepFadeFactor))
             VlcEngine.setRate(PlaybackStateStore.loadSpeed(applicationContext))
             VlcEngine.applyEqualizer(EqManager.currentBandsDb(applicationContext))
             VlcEngine.play(song)
@@ -523,8 +523,10 @@ class PlaybackService : MediaLibraryService() {
         // user's slider setting (and the VLC volume) or the volume bar
         // silently stops working after a fallback rebuild.
         VolumeBoost.setVolumePercent(PlaybackStateStore.loadVolume(applicationContext))
+        // v1.0.8: the restored slider value drives the device volume too.
+        SystemVolumeSync.applySliderPercent(VolumeBoost.volumePercent)
         plain.volume = VolumeBoost.playerVolume()
-        VlcEngine.setVolume(VolumeBoost.volumePercent)
+        VlcEngine.setVolume(VolumeBoost.vlcVolumePercent(VolumeBoost.volumePercent, 1f))
         if (items.isNotEmpty()) {
             plain.setMediaItems(items, index, position)
             plain.shuffleModeEnabled = shuffle
@@ -868,12 +870,15 @@ class PlaybackService : MediaLibraryService() {
                     step++
                     val f = (step / 30f).coerceIn(0f, 1f)
                     exo.volume = targetVolume * f
-                    VlcEngine.setVolume((targetPercent * f).toInt())
+                    VlcEngine.setVolume(VolumeBoost.vlcVolumePercent(targetPercent, f))
+                    // v1.0.8: the alarm ramp raises the DEVICE volume too.
+                    SystemVolumeSync.applySliderPercent((targetPercent * f).toInt())
                     if (step < 30 && exo.isPlaying) {
                         mainHandler.postDelayed(this, 1000)
                     } else {
                         exo.volume = targetVolume
-                        VlcEngine.setVolume(targetPercent)
+                        VlcEngine.setVolume(VolumeBoost.vlcVolumePercent(targetPercent, 1f))
+                        SystemVolumeSync.applySliderPercent(targetPercent)
                     }
                 }
             }
@@ -926,6 +931,8 @@ class PlaybackService : MediaLibraryService() {
         try {
             val volume = PlaybackStateStore.loadVolume(applicationContext)
             VolumeBoost.setVolumePercent(volume)
+            // v1.0.8: the restored slider value drives the device volume too.
+            SystemVolumeSync.applySliderPercent(volume)
             player?.volume = VolumeBoost.playerVolume()
             val speed = PlaybackStateStore.loadSpeed(applicationContext)
             if (speed != 1.0f) {

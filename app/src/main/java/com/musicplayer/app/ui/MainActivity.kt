@@ -412,6 +412,11 @@ class MainActivity : FullScreenActivity() {
             updateCheckedThisLaunch = true
             handler.postDelayed({ checkForUpdate(manual = false) }, 1500)
         }
+        PlayerConnection.addVolumeListener(volumeSyncListener)
+        // v1.0.8: the slider follows the device volume even while we were away.
+        val currentVolume = PlaybackStateStore.loadVolume(this)
+        binding.volumeSeek.progress = currentVolume
+        updateVolumeUi(currentVolume)
     }
 
     override fun onResume() {
@@ -427,6 +432,7 @@ class MainActivity : FullScreenActivity() {
 
     override fun onStop() {
         super.onStop()
+        PlayerConnection.removeVolumeListener(volumeSyncListener)
         com.musicplayer.app.player.VisualizerHub.removeListener(miniEqListener)
         binding.miniEq.setPlaying(false)
         PlayerConnection.controller?.removeListener(playerListener)
@@ -882,6 +888,13 @@ class MainActivity : FullScreenActivity() {
             }
             grid.addView(chip, params)
         }
+    }
+
+    // v1.0.8: the slider follows the DEVICE volume (hardware keys,
+    // notification, Android Auto) — updated live via PlayerConnection.
+    private val volumeSyncListener: (Int) -> Unit = { percent ->
+        binding.volumeSeek.progress = percent
+        updateVolumeUi(percent)
     }
 
     private fun wireSettings() {
