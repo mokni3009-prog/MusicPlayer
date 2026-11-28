@@ -52,12 +52,10 @@ object VlcEngine {
     @Volatile
     private var playGeneration = 0
 
-    companion object {
-        /** v1.0.16 (M9): the VLC cache used to grow forever (one file
-         * per song, never deleted). Keep at most 20 files / 200 MB. */
-        private const val VLC_CACHE_MAX_FILES = 20
-        private const val VLC_CACHE_MAX_BYTES = 200L * 1024L * 1024L
-    }
+    /** v1.0.16 (M9): the VLC cache used to grow forever (one file
+     * per song, never deleted). Keep at most 20 files / 200 MB. */
+    private const val VLC_CACHE_MAX_FILES = 20
+    private const val VLC_CACHE_MAX_BYTES = 200L * 1024L * 1024L
 
     @Volatile
     var active: Boolean = false

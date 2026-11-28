@@ -2,6 +2,7 @@ package com.musicplayer.app.player
 
 import android.content.Context
 import androidx.media3.common.C
+import androidx.media3.common.audio.AudioProcessor
 import androidx.media3.common.audio.BaseAudioProcessor
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
@@ -100,8 +101,8 @@ class SilenceSkippingAudioProcessor : BaseAudioProcessor() {
     private var heardAudio = false
 
     override fun onConfigure(
-        inputAudioFormat: AudioFormat
-    ): AudioFormat {
+        inputAudioFormat: AudioProcessor.AudioFormat
+    ): AudioProcessor.AudioFormat {
         sampleRate = inputAudioFormat.sampleRate
         channelCount = inputAudioFormat.channelCount
         encoding = inputAudioFormat.encoding
@@ -148,7 +149,7 @@ class SilenceSkippingAudioProcessor : BaseAudioProcessor() {
         }
         // Silent buffer: drop it, unless the safety cap is reached.
         val capFrames = if (heardAudio) 30L * sampleRate else 10L * sampleRate
-        return if (droppedFrames + frames <= capFrames) {
+        if (droppedFrames + frames <= capFrames) {
             droppedFrames += frames
             inputBuffer.position(inputBuffer.limit())
         } else {

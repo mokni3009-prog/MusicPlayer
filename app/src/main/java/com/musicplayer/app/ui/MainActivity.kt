@@ -571,9 +571,12 @@ class MainActivity : FullScreenActivity() {
         // load from overwriting a newer one.
         val generation = ++libraryLoadGeneration
         Thread {
-            val loaded: List<Song>
-            val favs: Set<Long>
-            val pls: List<Playlist>
+            // v1.0.16 (M5): `var` with initializers — a `val` declared
+            // without one cannot be assigned inside try/catch (the
+            // compiler cannot prove exactly-once assignment).
+            var loaded: List<Song> = emptyList()
+            var favs: Set<Long> = emptySet()
+            var pls: List<Playlist> = emptyList()
             try {
                 loaded = MusicRepository.loadSongs(this)
                 favs = FavoritesStore.getFavorites(this)
