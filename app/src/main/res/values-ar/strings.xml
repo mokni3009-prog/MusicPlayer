@@ -291,6 +291,7 @@
     <string name="tag_edit_failed_all">فشل تعديل الوسوم</string>
     <string name="tag_edit_partial">تم تعديل %1$d، وفشل %2$d</string>
     <string name="tag_edit_saving">جارٍ حفظ الوسوم…</string>
+    <string name="tag_edit_need_permission">لازم إذن الكتابة باش تحفظ تعديلات الوسوم</string>
     <string name="motion_title">نوع الحركة</string>
     <string name="motion_desc">اختار حركة التنقل. الاختيار يطبق فورًا.</string>
     <string name="motion_default">فخم (عنصر مشترك + تشكّل)</string>

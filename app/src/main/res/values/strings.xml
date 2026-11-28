@@ -291,6 +291,7 @@
     <string name="tag_edit_failed_all">Échec de la modification des tags</string>
     <string name="tag_edit_partial">%1$d modifiée(s), %2$d en échec</string>
     <string name="tag_edit_saving">Enregistrement des tags…</string>
+    <string name="tag_edit_need_permission">Autorisation d\'écriture requise pour modifier les tags</string>
     <string name="motion_title">Type de mouvement</string>
     <string name="motion_desc">Choisissez l\'animation des transitions. Le choix s\'applique immédiatement.</string>
     <string name="motion_default">Luxueux (élément partagé + morph)</string>

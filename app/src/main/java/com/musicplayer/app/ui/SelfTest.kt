@@ -141,21 +141,39 @@ object SelfTest {
             }
         }
 
-        // ---- Equalizer round-trip ----
+        // ---- Equalizer: live attachment, not just saved prefs ----
         onProgress("equalizer")
         try {
             Class.forName("android.media.audiofx.Equalizer")
             val bands = EqManager.currentBandsDb(context)
             EqManager.setLevels(context, bands)
             val back = EqManager.currentBandsDb(context)
-            results += if (back.contentEquals(bands)) {
-                CheckResult(
-                    "equalizer", Status.PASS,
-                    "5 bands, preset \"${EqManager.currentPresetName(context)}\", " +
-                        "bass ${EqManager.currentBass(context)}"
-                )
-            } else {
-                CheckResult("equalizer", Status.FAIL, "levels did not round-trip")
+            // v1.0.9: the prefs round-trip passed for months while the EQ
+            // was attached to NOTHING (Media3 never fired
+            // onAudioSessionIdChanged), so also verify the live effect
+            // object is really attached to an audio session.
+            val attached = EqManager.available && EqManager.attachedSessionId != 0
+            val songPlaying = PlayerConnection.currentSong() != null
+            results += when {
+                !back.contentEquals(bands) ->
+                    CheckResult("equalizer", Status.FAIL, "levels did not round-trip")
+                attached ->
+                    CheckResult(
+                        "equalizer", Status.PASS,
+                        "5 bands attached to session ${EqManager.attachedSessionId}, " +
+                            "preset \"${EqManager.currentPresetName(context)}\", " +
+                            "bass ${EqManager.currentBass(context)}"
+                    )
+                !songPlaying ->
+                    CheckResult(
+                        "equalizer", Status.SKIP,
+                        "no song playing yet — play a song, then re-run the test"
+                    )
+                else ->
+                    CheckResult(
+                        "equalizer", Status.FAIL,
+                        "EQ values save, but no live effect is attached to any audio session"
+                    )
             }
         } catch (e: Exception) {
             results += CheckResult("equalizer", Status.FAIL, e.message ?: "error")
@@ -333,15 +351,33 @@ object SelfTest {
             results += CheckResult("components", Status.FAIL, e.message ?: "error")
         }
 
-        // ---- Reverb ----
+        // ---- Reverb: live attachment, not just the saved preset ----
         onProgress("reverb")
         try {
             Class.forName("android.media.audiofx.PresetReverb")
             val preset = ReverbManager.loadPreset(context)
-            results += if (preset in 0..3) {
-                CheckResult("reverb", Status.PASS, "preset $preset")
-            } else {
-                CheckResult("reverb", Status.FAIL, "invalid preset $preset")
+            // v1.0.9: same trap as the equalizer — the preset round-trip
+            // passed while no live reverb was attached to any session.
+            val attached = ReverbManager.isAttached()
+            val songPlaying = PlayerConnection.currentSong() != null
+            results += when {
+                preset !in 0..3 ->
+                    CheckResult("reverb", Status.FAIL, "invalid preset $preset")
+                attached ->
+                    CheckResult(
+                        "reverb", Status.PASS,
+                        "preset $preset, attached to session ${ReverbManager.attachedSessionId}"
+                    )
+                !songPlaying ->
+                    CheckResult(
+                        "reverb", Status.SKIP,
+                        "no song playing yet — play a song, then re-run the test"
+                    )
+                else ->
+                    CheckResult(
+                        "reverb", Status.FAIL,
+                        "preset $preset saved, but no live reverb is attached"
+                    )
             }
         } catch (e: Exception) {
             results += CheckResult("reverb", Status.FAIL, e.message ?: "error")

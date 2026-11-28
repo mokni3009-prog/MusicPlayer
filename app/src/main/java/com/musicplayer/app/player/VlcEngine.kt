@@ -234,8 +234,12 @@ object VlcEngine {
         }
     }
 
-    /** Applies the equalizer bands (5 band levels in dB) to VLC's 10-band EQ. */
-    fun applyEqualizer(bandsDb: FloatArray?) {
+    /** Applies the equalizer bands (5 band levels in dB) to VLC's 10-band EQ.
+     * Bass boost (0..100) raises the two lowest VLC bands (60 / 170 Hz).
+     * Call this AFTER the media starts playing too (see
+     * PlaybackService.vlcListener.onVlcStarted): an equalizer set before
+     * any input exists can be dropped by libVLC. */
+    fun applyEqualizer(bandsDb: FloatArray?, bass0to100: Int = 0) {
         try {
             val player = mediaPlayer ?: return
             if (bandsDb == null) {
@@ -249,6 +253,13 @@ object VlcEngine {
             for (i in bandsDb.indices) {
                 if (i >= map.size) break
                 eq.setAmp(map[i], bandsDb[i])
+            }
+            // Bass boost: raise the two lowest bands (60 Hz fully, 170 Hz half).
+            val bassDb = (bass0to100.coerceIn(0, 100) / 100f) * 6f
+            if (bassDb > 0f) {
+                val low0 = (bandsDb.getOrElse(0) { 0f } + bassDb).coerceIn(-20f, 20f)
+                eq.setAmp(0, low0)
+                eq.setAmp(1, (bassDb * 0.5f).coerceIn(-20f, 20f))
             }
             player.setEqualizer(eq)
         } catch (e: Exception) {

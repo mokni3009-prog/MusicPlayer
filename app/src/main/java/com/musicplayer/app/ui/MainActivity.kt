@@ -47,6 +47,7 @@ import com.musicplayer.app.data.PlaybackStateStore
 import com.musicplayer.app.data.Playlist
 import com.musicplayer.app.data.PlaylistStore
 import com.musicplayer.app.data.Song
+import com.musicplayer.app.data.TagEditor
 import com.musicplayer.app.databinding.ActivityMainBinding
 import com.musicplayer.app.player.LyricsManager
 import com.musicplayer.app.player.PlaybackService
@@ -118,6 +119,9 @@ class MainActivity : FullScreenActivity() {
     private var updateCheckedThisLaunch = false
     private var pendingRelease: ReleaseInfo? = null
     private var updateInProgress = false
+
+    /** When the library was last loaded — a tag edit after this reloads it. */
+    private var lastLibraryLoadMs: Long = 0L
 
     private val permissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
@@ -427,6 +431,11 @@ class MainActivity : FullScreenActivity() {
             pendingRelease = null
             downloadAndInstall(pending)
         }
+        // v1.0.9: back from the tag editor after a successful edit — reload
+        // the library so the new title/artist shows without restarting.
+        if (libraryReady && TagEditor.lastSuccessfulEditMs > lastLibraryLoadMs) {
+            loadSongs()
+        }
         refreshBatteryStatus()
     }
 
@@ -533,6 +542,7 @@ class MainActivity : FullScreenActivity() {
             allSongs = emptyList()
         }
         libraryReady = true
+        lastLibraryLoadMs = System.currentTimeMillis()
         refreshContent()
         tryRestore()
         if (allSongs.isEmpty()) {

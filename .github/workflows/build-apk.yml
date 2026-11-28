@@ -91,15 +91,13 @@ jobs:
       - name: Publish release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v1.0.8
-          name: Zeno Play v1.0.8
+          tag_name: v1.0.9
+          name: Zeno Play v1.0.9
           body: |
-            Zeno Play v1.0.8 — one feature: the volume slider is now synced with the DEVICE volume, both ways (signed with the permanent release key).
+            Zeno Play v1.0.9 — bug fixes only: the equalizer now really changes the sound, and tag editing now really saves.
 
-            - NEW: the in-app volume slider (0..100%) now drives the device volume itself (AudioManager, STREAM_MUSIC) with the same square-law perceptual curve, so the feel is unchanged. Above 100% the device stays at max and the extra boost is internal (GainAudioProcessor / VLC + knee limiter), as before.
-            - NEW: the reverse direction — hardware volume keys, the notification and Android Auto change the device volume, and the slider in the app follows (ContentObserver on the system volume, with a loop guard so our own changes never echo back).
-            - NEW: on launch the slider starts from the current device volume; a saved boost above 100% survives only while the device is still at max.
-            - Unchanged: all v1.0.6 volume fixes (slider value restored after VLC -> ExoPlayer switches and after player rebuilds, per-output EQ, balance/mono, per-song volume/speed memory), sleep-timer fade and the music-alarm ramp (they now fade the device volume too).
+            - FIXED (equalizer): the EQ, bass boost and reverb changed values on screen but never touched the sound. Root cause, verified against the Media3 1.5.1 source: Player.Listener.onAudioSessionIdChanged never fires unless the app calls player.setAudioSessionId() itself — the session id is generated silently at construction — so the equalizer was never attached to any audio session. The service now attaches the EQ, bass boost, reverb and visualizer explicitly to player.audioSessionId after every player build/rebuild. Balance/mono are also restored at service start (they used to reset silently on every service restart), and the VLC equalizer is re-applied once VLC really starts playing (plus bass boost on VLC). The self-test now verifies the live attachment instead of only the saved values.
+            - FIXED (tag editor): editing a title failed with "Failed to edit tags" and nothing was saved. Root cause: the manifest never declared WRITE_EXTERNAL_STORAGE, so on Android 9 File.canWrite() is false and the save failed in a branch that logged nothing (which is why no error report ever arrived). The permission is now declared (maxSdkVersion 28) and requested just in time when saving; on Android 10+ a MediaStore write request is used instead. Both silent failure branches now log to the error server, a full-date year (e.g. 20200125) is normalised to its year (2020), and after a successful edit MediaStore is rescanned and the library reloads so the new title shows without restarting.
 
-            Installs over v1.0.7 normally (same release key, no uninstall needed).
+            Installs over v1.0.8 normally (same release key, no uninstall needed).
           files: app/build/outputs/apk/release/*.apk

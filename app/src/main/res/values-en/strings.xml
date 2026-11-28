@@ -291,6 +291,7 @@
     <string name="tag_edit_failed_all">Failed to edit tags</string>
     <string name="tag_edit_partial">%1$d updated, %2$d failed</string>
     <string name="tag_edit_saving">Saving tags…</string>
+    <string name="tag_edit_need_permission">Write permission is needed to save tag changes</string>
     <string name="motion_title">Motion type</string>
     <string name="motion_desc">Choose the navigation animation. Applies immediately.</string>
     <string name="motion_default">Luxurious (shared element + morph)</string>

@@ -43,7 +43,12 @@ object EqManager {
 
     private var equalizer: Equalizer? = null
     private var bassBoost: BassBoost? = null
-    private var attachedSessionId: Int = 0
+    // v1.0.9: exposed (read-only) so the self-test can verify the live
+    // effect is really attached to a session — the prefs round-trip alone
+    // passed while the EQ was attached to nothing.
+    @Volatile
+    var attachedSessionId: Int = 0
+        private set
 
     @Volatile
     var available: Boolean = false
@@ -127,7 +132,7 @@ object EqManager {
             applyLevels(eq, levels)
             bassBoost?.setStrength((loadBass(context, currentOutput) * 10).toShort())
             // Mirror the same bands on the VLC engine (best effort).
-            VlcEngine.applyEqualizer(levels)
+            VlcEngine.applyEqualizer(levels, loadBass(context, currentOutput))
         } catch (e: Exception) {
             ErrorReporter.log(
                 ErrorReporter.TYPE_ERROR,
@@ -161,7 +166,7 @@ object EqManager {
             if (!isEnabled(context)) return
             applyLevels(eq, levelsDb)
             bassBoost?.setStrength((bass.coerceIn(0, 100) * 10).toShort())
-            VlcEngine.applyEqualizer(levelsDb)
+            VlcEngine.applyEqualizer(levelsDb, bass)
         } catch (e: Exception) {
             ErrorReporter.log(
                 ErrorReporter.TYPE_ERROR,
@@ -177,7 +182,7 @@ object EqManager {
         val eq = equalizer
         if (eq != null && isEnabled(context)) {
             applyLevels(eq, levelsDb)
-            VlcEngine.applyEqualizer(levelsDb)
+            VlcEngine.applyEqualizer(levelsDb, currentBass(context))
         }
     }
 
@@ -188,7 +193,7 @@ object EqManager {
         val eq = equalizer
         if (eq != null && isEnabled(context)) {
             applyLevels(eq, levels)
-            VlcEngine.applyEqualizer(levels)
+            VlcEngine.applyEqualizer(levels, currentBass(context))
         }
     }
 

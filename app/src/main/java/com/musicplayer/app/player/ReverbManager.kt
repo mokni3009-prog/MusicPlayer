@@ -22,7 +22,14 @@ object ReverbManager {
     private const val KEY_PRESET = "preset"
 
     private var reverb: PresetReverb? = null
-    private var attachedSessionId = 0
+    // v1.0.9: exposed (read-only) so the self-test can verify the live
+    // reverb is really attached to a session (see EqManager).
+    @Volatile
+    var attachedSessionId = 0
+        private set
+
+    /** True when a live PresetReverb is attached to an audio session. */
+    fun isAttached(): Boolean = reverb != null && attachedSessionId != 0
 
     fun loadPreset(context: Context): Int {
         return try {

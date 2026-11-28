@@ -227,6 +227,12 @@ class PlaybackService : MediaLibraryService() {
     private val vlcListener = object : VlcEngine.Listener {
         override fun onVlcStarted(song: Song) {
             vlcPlayingCurrent = true
+            // v1.0.9: re-apply the EQ now that VLC has a live input — an
+            // equalizer set before the media starts can be dropped.
+            VlcEngine.applyEqualizer(
+                EqManager.currentBandsDb(applicationContext),
+                EqManager.currentBass(applicationContext)
+            )
             nudgeNotification()
         }
 
@@ -519,6 +525,9 @@ class PlaybackService : MediaLibraryService() {
         player = ExoPlayer.Builder(this).build()
         val plain = player!!
         plain.addListener(playerListener)
+        // v1.0.9: re-attach EQ/Reverb/Visualizer to the NEW player's session
+        // (see attachAudioEffects — the session callback never fires).
+        attachAudioEffects()
         // v1.0.6: a fresh player defaults to volume 1.0 — restore the
         // user's slider setting (and the VLC volume) or the volume bar
         // silently stops working after a fallback rebuild.
@@ -927,12 +936,24 @@ class PlaybackService : MediaLibraryService() {
                 )
             }
         }
+        // v1.0.9: attach EQ/Reverb/Visualizer explicitly — Player.Listener
+        // .onAudioSessionIdChanged NEVER fires in Media3 1.5.1 unless the
+        // app calls player.setAudioSessionId() itself (the id is generated
+        // silently at construction), so relying on that callback left the
+        // equalizer, bass boost and reverb attached to nothing: the UI
+        // values changed, the sound never did.
+        attachAudioEffects()
         // Restore the user's volume and speed.
         try {
             val volume = PlaybackStateStore.loadVolume(applicationContext)
             VolumeBoost.setVolumePercent(volume)
             // v1.0.8: the restored slider value drives the device volume too.
             SystemVolumeSync.applySliderPercent(volume)
+            // v1.0.9: balance/mono are live fields read by GainAudioProcessor
+            // — restore them at service start, or they silently reset to
+            // centre/stereo whenever the service restarts.
+            VolumeBoost.balance = PlaybackStateStore.loadBalance(applicationContext)
+            VolumeBoost.mono = PlaybackStateStore.loadMono(applicationContext)
             player?.volume = VolumeBoost.playerVolume()
             val speed = PlaybackStateStore.loadSpeed(applicationContext)
             if (speed != 1.0f) {
@@ -1024,6 +1045,42 @@ class PlaybackService : MediaLibraryService() {
         session = null
         player = null
         super.onDestroy()
+    }
+
+    /**
+     * Attaches the equalizer, bass boost, reverb and system visualizer to
+     * the player's audio session. Must be called EXPLICITLY after every
+     * player build/rebuild: Player.Listener.onAudioSessionIdChanged never
+     * fires in Media3 1.5.1 (the session id is generated silently at
+     * construction and the event only fires from the explicit
+     * setAudioSessionId() setter, which the app never calls) — verified
+     * against the Media3 1.5.1 source. The listener callback is kept as a
+     * backup only.
+     */
+    private fun attachAudioEffects() {
+        try {
+            val exo = player ?: return
+            val sessionId = exo.audioSessionId
+            if (sessionId == 0 ||
+                sessionId == androidx.media3.common.C.AUDIO_SESSION_ID_UNSET
+            ) {
+                ErrorReporter.log(
+                    ErrorReporter.TYPE_ERROR,
+                    "EQ attach skipped: no audio session yet",
+                    null
+                )
+                return
+            }
+            setupVisualizer(sessionId)
+            EqManager.attach(applicationContext, sessionId)
+            ReverbManager.attach(applicationContext, sessionId)
+        } catch (e: Exception) {
+            ErrorReporter.log(
+                ErrorReporter.TYPE_ERROR,
+                "EQ attach failed: ${e.message}",
+                e
+            )
+        }
     }
 
     private fun setupVisualizer(audioSessionId: Int) {

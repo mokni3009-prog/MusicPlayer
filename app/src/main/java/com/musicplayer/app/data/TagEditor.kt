@@ -37,6 +37,12 @@ object TagEditor {
         val failed: List<String>
     )
 
+    /** When the last tag edit succeeded (ms) — MainActivity reloads the
+     * library on resume when this is newer than its last load, so the new
+     * title shows without restarting the app. */
+    @Volatile
+    var lastSuccessfulEditMs: Long = 0L
+
     /** Returns the absolute file paths for the given song ids. */
     fun filePathsFor(context: Context, songIds: List<Long>): Map<Long, String> {
         val result = mutableMapOf<Long, String>()
@@ -79,12 +85,29 @@ object TagEditor {
         for (song in songs) {
             val path = paths[song.id]
             if (path.isNullOrBlank()) {
+                // v1.0.9: this used to fail SILENTLY (no report) — log it
+                // so a future failure is visible on the server.
+                ErrorReporter.log(
+                    ErrorReporter.TYPE_ERROR,
+                    "Tag edit failed for ${song.title}: no file path (scoped storage)",
+                    null
+                )
                 failed.add(song.title)
                 continue
             }
             try {
                 val file = File(path)
                 if (!file.exists() || !file.canWrite()) {
+                    // v1.0.9: this used to fail SILENTLY (no report). The
+                    // usual cause on Android 9 is the missing
+                    // WRITE_EXTERNAL_STORAGE permission — TagEditActivity
+                    // requests it before saving now. On Android 10+ the
+                    // file needs a MediaStore write request instead.
+                    ErrorReporter.log(
+                        ErrorReporter.TYPE_ERROR,
+                        "Tag edit failed for ${song.title}: file not writable",
+                        null
+                    )
                     failed.add(song.title)
                     continue
                 }
@@ -94,7 +117,14 @@ object TagEditor {
                 changes.artist?.let { tag.setField(FieldKey.ARTIST, it) }
                 changes.album?.let { tag.setField(FieldKey.ALBUM, it) }
                 changes.genre?.let { tag.setField(FieldKey.GENRE, it) }
-                changes.year?.let { tag.setField(FieldKey.YEAR, it) }
+                // v1.0.9: YEAR must be a 4-digit year. Some files store a
+                // full date instead (e.g. 20200125 = 2020-01-25), which
+                // jaudiotagger rejects on ID3v2.3 tags — keep the year part.
+                changes.year?.let { raw ->
+                    val digits = raw.filter { it.isDigit() }
+                    val year = if (digits.length >= 4) digits.take(4) else null
+                    if (year != null) tag.setField(FieldKey.YEAR, year)
+                }
                 if (changes.removeCover) {
                     tag.deleteArtworkField()
                 } else if (changes.coverBytes != null) {
@@ -105,6 +135,7 @@ object TagEditor {
                     tag.setField(artwork)
                 }
                 audioFile.commit()
+                lastSuccessfulEditMs = System.currentTimeMillis()
                 updated++
             } catch (e: Exception) {
                 ErrorReporter.log(
