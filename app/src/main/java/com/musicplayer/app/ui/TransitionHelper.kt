@@ -18,6 +18,7 @@ import com.musicplayer.app.ui.MotionStyle.Companion.usesSharedElement
 import android.transition.ChangeBounds
 import android.transition.ChangeImageTransform
 import android.transition.ChangeTransform
+import android.transition.Transition
 import android.transition.TransitionSet
 import android.transition.TransitionValues
 import android.view.ViewGroup
@@ -49,21 +50,50 @@ object TransitionHelper {
      * in the window overlay instead of the activity hierarchy. The real
      * fix is the correct wiring (the shared view is the container that
      * carries the transitionName, and both activities set the
-     * MaterialContainerTransformSharedElementCallback); this subclass is
+     * MaterialContainerTransformSharedElementCallback); this wrapper is
      * the last-resort guard: if the framework ever hands the transform
      * an unusable view again, this child contributes no animator instead
      * of killing the app — the ChangeBounds / ChangeTransform /
      * ChangeImageTransform children still fly the cover, so the user
      * still sees a real shared-element motion, never a crash.
+     *
+     * MaterialContainerTransform is final, so the guard is a delegating
+     * [Transition] wrapper instead of a subclass: capture and animator
+     * creation are forwarded to the real transform, and only the
+     * animator creation is protected. The delegate is stateless across
+     * captures (it writes into the TransitionValues it is handed), so
+     * sharing it with the framework's clone() is safe.
      */
-    class SafeContainerTransform : MaterialContainerTransform() {
+    class SafeContainerTransform : Transition() {
+        private val delegate = MaterialContainerTransform().apply {
+            duration = 450
+            interpolator = AccelerateDecelerateInterpolator()
+        }
+
+        init {
+            duration = 450
+            interpolator = AccelerateDecelerateInterpolator()
+        }
+
+        override fun captureStartValues(transitionValues: TransitionValues) {
+            delegate.captureStartValues(transitionValues)
+        }
+
+        override fun captureEndValues(transitionValues: TransitionValues) {
+            delegate.captureEndValues(transitionValues)
+        }
+
+        override fun getTransitionProperties(): Array<String>? {
+            return delegate.transitionProperties
+        }
+
         override fun createAnimator(
             sceneRoot: ViewGroup,
             startValues: TransitionValues?,
             endValues: TransitionValues?
         ): android.animation.Animator? {
             return try {
-                super.createAnimator(sceneRoot, startValues, endValues)
+                delegate.createAnimator(sceneRoot, startValues, endValues)
             } catch (e: IllegalArgumentException) {
                 null
             }
@@ -224,12 +254,7 @@ object TransitionHelper {
     /** Shared-element transition set for the target activity's window. */
     fun sharedTransition(): TransitionSet {
         return TransitionSet().apply {
-            addTransition(
-                SafeContainerTransform().apply {
-                    duration = 450
-                    interpolator = AccelerateDecelerateInterpolator()
-                }
-            )
+            addTransition(SafeContainerTransform())
             addTransition(ChangeBounds().apply { duration = 450 })
             addTransition(ChangeTransform().apply { duration = 450 })
             addTransition(ChangeImageTransform().apply { duration = 450 })
