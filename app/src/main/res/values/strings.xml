@@ -355,7 +355,7 @@
     <string name="karaoke_line">Karaoké : ligne par ligne</string>
     <string name="karaoke_word">Karaoké : mot par mot</string>
     <string name="luxury_doubletap">Double appui sur la pochette pour aimer</string>
-    <string name="luxury_summary_title">Résumé, alarme et verrouillage</string>
+    <string name="luxury_summary_title">Résumé et verrouillage</string>
     <string name="wrapped_open">Voir mon résumé d\'écoute</string>
     <string name="luxury_lock">Écran de verrouillage complet</string>
     <string name="luxury_theme">Thème de couleurs</string>
@@ -393,6 +393,28 @@
     <string name="alarm_saved">Alarme réglée à %1$s.</string>
     <string name="alarm_need_permission">Autorisez les alarmes exactes dans les paramètres système.</string>
     <string name="alarm_open">Régler l\'alarme musicale</string>
+    <!-- v1.0.13: the alarm is now a full alarm app (ALARME tab). -->
+    <string name="tab_alarm">ALARME</string>
+    <string name="alarm_next">Prochaine alarme</string>
+    <string name="alarm_upcoming">Prochaines alarmes</string>
+    <string name="alarm_no_alarms">Aucune alarme — touchez + pour en créer une.</string>
+    <string name="alarm_no_other">Aucune autre alarme.</string>
+    <string name="alarm_new">Nouvelle alarme</string>
+    <string name="alarm_edit">Modifier l\'alarme</string>
+    <string name="alarm_name">Nom</string>
+    <string name="alarm_repeat">Répéter</string>
+    <string name="alarm_ringtone">Sonnerie</string>
+    <string name="alarm_choose">Choisir</string>
+    <string name="alarm_fade_in">Volume progressif</string>
+    <string name="alarm_deleted">Alarme supprimée.</string>
+    <string name="alarm_in_hours">dans %1$d h %2$02d</string>
+    <string name="alarm_in_minutes">dans %1$d min</string>
+    <string name="alarm_once">Une seule fois</string>
+    <string name="alarm_default_name">Alarme</string>
+    <string name="alarm_stop">Arrêter</string>
+    <string name="alarm_channel_name">Alarmes</string>
+    <string name="alarm_channel_desc">Notifications des alarmes musicales</string>
+    <string name="alarm_ringing">Alarme</string>
     <string name="selftest_title">Auto-test</string>
     <string name="selftest_desc">Vérifie chaque fonction et l\'affichage, puis envoie le rapport automatiquement.</string>
     <string name="selftest_run">Lancer l\'auto-test</string>

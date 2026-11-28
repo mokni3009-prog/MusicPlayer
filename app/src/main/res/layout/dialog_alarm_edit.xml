@@ -1,0 +1,285 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- v1.0.13: add / edit alarm sheet (approved mockup) — big time picker,
+     name, repeat days, song picker, gradual volume, Cancel / Save. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:background="@drawable/bg_dialog"
+    android:orientation="vertical"
+    android:paddingStart="20dp"
+    android:paddingTop="12dp"
+    android:paddingEnd="20dp"
+    android:paddingBottom="24dp">
+
+    <!-- Drag handle -->
+    <View
+        android:layout_width="40dp"
+        android:layout_height="4dp"
+        android:layout_gravity="center_horizontal"
+        android:layout_marginBottom="14dp"
+        android:background="@drawable/bg_chip_selected" />
+
+    <TextView
+        android:id="@+id/dialogAlarmTitle"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center"
+        android:text="@string/alarm_new"
+        android:textColor="@color/zeno_ink"
+        android:textSize="20sp"
+        android:textStyle="bold" />
+
+    <!-- Big time picker with chevrons -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="16dp"
+        android:gravity="center"
+        android:orientation="horizontal">
+
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:gravity="center"
+            android:orientation="vertical">
+
+            <ImageButton
+                android:id="@+id/alarmHourUp"
+                android:layout_width="48dp"
+                android:layout_height="36dp"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:contentDescription="@string/alarm_new"
+                android:src="@drawable/ic_chevron_up"
+                android:tint="@color/zeno_cyan" />
+
+            <TextView
+                android:id="@+id/alarmHourText"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="07"
+                android:textColor="@color/zeno_ink"
+                android:textSize="48sp"
+                android:textStyle="bold" />
+
+            <ImageButton
+                android:id="@+id/alarmHourDown"
+                android:layout_width="48dp"
+                android:layout_height="36dp"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:contentDescription="@string/alarm_new"
+                android:src="@drawable/ic_chevron_down"
+                android:tint="@color/zeno_cyan" />
+
+        </LinearLayout>
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="4dp"
+            android:layout_marginEnd="4dp"
+            android:text=":"
+            android:textColor="@color/zeno_ink"
+            android:textSize="48sp"
+            android:textStyle="bold" />
+
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:gravity="center"
+            android:orientation="vertical">
+
+            <ImageButton
+                android:id="@+id/alarmMinuteUp"
+                android:layout_width="48dp"
+                android:layout_height="36dp"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:contentDescription="@string/alarm_new"
+                android:src="@drawable/ic_chevron_up"
+                android:tint="@color/zeno_cyan" />
+
+            <TextView
+                android:id="@+id/alarmMinuteText"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="00"
+                android:textColor="@color/zeno_ink"
+                android:textSize="48sp"
+                android:textStyle="bold" />
+
+            <ImageButton
+                android:id="@+id/alarmMinuteDown"
+                android:layout_width="48dp"
+                android:layout_height="36dp"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:contentDescription="@string/alarm_new"
+                android:src="@drawable/ic_chevron_down"
+                android:tint="@color/zeno_cyan" />
+
+        </LinearLayout>
+
+    </LinearLayout>
+
+    <!-- Name -->
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="16dp"
+        android:text="@string/alarm_name"
+        android:textColor="@color/zeno_ink2"
+        android:textSize="14sp" />
+
+    <EditText
+        android:id="@+id/alarmNameInput"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="6dp"
+        android:background="@drawable/bg_input"
+        android:imeOptions="actionDone"
+        android:inputType="text"
+        android:paddingStart="14dp"
+        android:paddingTop="10dp"
+        android:paddingEnd="14dp"
+        android:paddingBottom="10dp"
+        android:textColor="@color/zeno_ink"
+        android:textSize="15sp" />
+
+    <!-- Repeat days (chips are added in code) -->
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="16dp"
+        android:text="@string/alarm_repeat"
+        android:textColor="@color/zeno_ink2"
+        android:textSize="14sp" />
+
+    <LinearLayout
+        android:id="@+id/alarmDaysRow"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:gravity="center"
+        android:orientation="horizontal" />
+
+    <!-- Song -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="16dp"
+        android:gravity="center_vertical"
+        android:orientation="horizontal">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/alarm_ringtone"
+            android:textColor="@color/zeno_ink2"
+            android:textSize="14sp" />
+
+        <TextView
+            android:id="@+id/alarmSongLabel"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="12dp"
+            android:layout_weight="1"
+            android:ellipsize="end"
+            android:maxLines="1"
+            android:text="@string/alarm_no_song"
+            android:textColor="@color/zeno_gold"
+            android:textSize="14sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/alarmChooseBtn"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:background="@drawable/bg_chip"
+            android:paddingStart="14dp"
+            android:paddingTop="8dp"
+            android:paddingEnd="14dp"
+            android:paddingBottom="8dp"
+            android:text="@string/alarm_choose"
+            android:textColor="@color/zeno_cyan"
+            android:textSize="13sp"
+            android:textStyle="bold" />
+
+    </LinearLayout>
+
+    <!-- Gradual volume -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="16dp"
+        android:gravity="center_vertical"
+        android:orientation="horizontal">
+
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="@string/alarm_fade_in"
+            android:textColor="@color/zeno_ink"
+            android:textSize="15sp"
+            android:textStyle="bold" />
+
+        <androidx.appcompat.widget.SwitchCompat
+            android:id="@+id/alarmFadeSwitch"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:checked="true" />
+
+    </LinearLayout>
+
+    <!-- Cancel / Save -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="22dp"
+        android:orientation="horizontal">
+
+        <TextView
+            android:id="@+id/alarmCancelBtn"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginEnd="8dp"
+            android:layout_weight="1"
+            android:background="@drawable/bg_chip"
+            android:gravity="center"
+            android:paddingTop="13dp"
+            android:paddingBottom="13dp"
+            android:text="@string/cancel"
+            android:textColor="@color/zeno_ink2"
+            android:textSize="15sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/alarmSaveBtn"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="8dp"
+            android:layout_weight="1"
+            android:background="@drawable/bg_play_btn"
+            android:gravity="center"
+            android:paddingTop="13dp"
+            android:paddingBottom="13dp"
+            android:text="@string/save"
+            android:textColor="@color/zeno_on_gradient"
+            android:textSize="15sp"
+            android:textStyle="bold" />
+
+    </LinearLayout>
+
+    <!-- Delete (edit mode only) -->
+    <TextView
+        android:id="@+id/alarmDeleteBtn"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="14dp"
+        android:gravity="center"
+        android:padding="6dp"
+        android:text="@string/delete"
+        android:textColor="#FF9E9E"
+        android:textSize="14sp"
+        android:textStyle="bold"
+        android:visibility="gone" />
+
+</LinearLayout>

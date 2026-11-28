@@ -84,7 +84,7 @@
 
         </LinearLayout>
 
-        <!-- Tabs: CHANSONS / ALBUMS / ARTISTES / PLAYLISTS / DOSSIERS / PARAMÈTRES -->
+        <!-- Tabs: CHANSONS / ALBUMS / ARTISTES / PLAYLISTS / ALARME / DOSSIERS / PARAMÈTRES -->
         <HorizontalScrollView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -202,6 +202,23 @@
             android:layout_weight="1"
             android:clipToPadding="false"
             android:paddingBottom="96dp" />
+
+        <!-- Alarm (ALARME tab) — v1.0.13: the alarm app inside the app. -->
+        <FrameLayout
+            android:id="@+id/alarmContainer"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_marginTop="8dp"
+            android:layout_weight="1"
+            android:visibility="gone">
+
+            <include
+                android:id="@+id/alarmTab"
+                layout="@layout/layout_alarm_tab"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent" />
+
+        </FrameLayout>
 
         <!-- Settings (PARAMÈTRES tab) -->
         <ScrollView
@@ -1194,7 +1211,7 @@
 
                 </LinearLayout>
 
-                <!-- Luxury: wrapped, alarm, lock screen, theme -->
+                <!-- Luxury: wrapped, lock screen, theme -->
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
@@ -1237,21 +1254,6 @@
                         android:paddingEnd="12dp"
                         android:paddingBottom="6dp"
                         android:text="@string/wrapped_yearly"
-                        android:textColor="@color/zeno_cyan"
-                        android:textSize="13sp"
-                        android:textStyle="bold" />
-
-                    <TextView
-                        android:id="@+id/alarmBtn"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="12dp"
-                        android:background="@drawable/bg_chip"
-                        android:paddingStart="12dp"
-                        android:paddingTop="8dp"
-                        android:paddingEnd="12dp"
-                        android:paddingBottom="8dp"
-                        android:text="@string/alarm_open"
                         android:textColor="@color/zeno_cyan"
                         android:textSize="13sp"
                         android:textStyle="bold" />

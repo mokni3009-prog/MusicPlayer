@@ -353,7 +353,7 @@
     <string name="karaoke_line">كاريوكي: سطر بسطر</string>
     <string name="karaoke_word">كاريوكي: كلمة بكلمة</string>
     <string name="luxury_doubletap">نقر مزدوج على الغلاف للإعجاب</string>
-    <string name="luxury_summary_title">الملخص والمنبه والقفل</string>
+    <string name="luxury_summary_title">الملخص والقفل</string>
     <string name="wrapped_open">شوف ملخص الاستماع متاعي</string>
     <string name="luxury_lock">شاشة قفل كاملة</string>
     <string name="luxury_theme">ألوان الثيم</string>
@@ -391,6 +391,28 @@
     <string name="alarm_saved">المنبه مضبوط على %1$s.</string>
     <string name="alarm_need_permission">فعّل الأذونات متاع المنبهات الدقيقة في إعدادات النظام.</string>
     <string name="alarm_open">اضبط المنبه الموسيقي</string>
+    <!-- v1.0.13: المنبه ولى تطبيق منبه كامل (قسم ALARME). -->
+    <string name="tab_alarm">المنبه</string>
+    <string name="alarm_next">المنبه الجاي</string>
+    <string name="alarm_upcoming">المنبهات الجاية</string>
+    <string name="alarm_no_alarms">ما فماش منبه — انقر + باش تزيد واحد.</string>
+    <string name="alarm_no_other">ما فماش منبه آخر.</string>
+    <string name="alarm_new">منبه جديد</string>
+    <string name="alarm_edit">عدّل المنبه</string>
+    <string name="alarm_name">الاسم</string>
+    <string name="alarm_repeat">التكرار</string>
+    <string name="alarm_ringtone">النغمة</string>
+    <string name="alarm_choose">اختار</string>
+    <string name="alarm_fade_in">الصوت التدريجي</string>
+    <string name="alarm_deleted">تم حذف المنبه.</string>
+    <string name="alarm_in_hours">بعد %1$d سا %2$02d دق</string>
+    <string name="alarm_in_minutes">بعد %1$d دقيقة</string>
+    <string name="alarm_once">مرة وحدة برك</string>
+    <string name="alarm_default_name">منبه</string>
+    <string name="alarm_stop">أوقف</string>
+    <string name="alarm_channel_name">المنبهات</string>
+    <string name="alarm_channel_desc">إشعارات المنبهات الموسيقية</string>
+    <string name="alarm_ringing">منبه</string>
     <string name="selftest_title">اختبار ذاتي</string>
     <string name="selftest_desc">يفحص كل خاصية والعرض، وبعد يبعث التقرير أوتوماتيكيًا.</string>
     <string name="selftest_run">شغّل الاختبار الذاتي</string>

@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- v1.0.13: glowing gradient border for the "next alarm" card (design 3).
+     Layer 1 is the gold -> cyan gradient; layer 2 is the dark card inset by
+     2dp, so only a 2dp gradient frame shows. Angle 45 = multiple of 45. -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item>
+        <shape android:shape="rectangle">
+            <gradient
+                android:angle="45"
+                android:startColor="#FFD76A"
+                android:centerColor="#9BE15D"
+                android:endColor="#2DE2E6"
+                android:type="linear" />
+            <corners android:radius="20dp" />
+        </shape>
+    </item>
+    <item
+        android:bottom="2dp"
+        android:left="2dp"
+        android:right="2dp"
+        android:top="2dp">
+        <shape android:shape="rectangle">
+            <solid android:color="#0D1C3C" />
+            <corners android:radius="18dp" />
+        </shape>
+    </item>
+</layer-list>

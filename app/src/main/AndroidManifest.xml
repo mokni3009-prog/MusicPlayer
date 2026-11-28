@@ -17,6 +17,9 @@
         android:maxSdkVersion="28" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <!-- v1.0.13: full-screen intent for the ringing screen (Android 14+). -->
+    <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
 
     <!-- Android TV: leanback is optional (same APK also runs on phones/tablets),
@@ -118,6 +121,16 @@
             android:screenOrientation="portrait"
             android:parentActivityName=".ui.MainActivity" />
 
+        <!-- v1.0.13: ringing screen — shown over the lock screen by the
+             alarm notification's full-screen intent. -->
+        <activity
+            android:name=".ui.AlarmRingingActivity"
+            android:exported="false"
+            android:screenOrientation="portrait"
+            android:excludeFromRecents="true"
+            android:showWhenLocked="true"
+            android:turnScreenOn="true" />
+
         <!-- Luxury: full lock screen (shown over the lock screen). -->
         <activity
             android:name=".ui.LockActivity"
@@ -177,6 +190,15 @@
         <receiver
             android:name=".ui.AlarmReceiver"
             android:exported="false" />
+
+        <!-- v1.0.13: after a reboot, re-schedule every enabled alarm. -->
+        <receiver
+            android:name=".ui.AlarmBootReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+            </intent-filter>
+        </receiver>
 
         <!-- Android Auto: declares this app as a media app for cars. -->
         <meta-data

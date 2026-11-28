@@ -2,6 +2,7 @@ package com.musicplayer.app.player
 
 import android.app.NotificationChannel
 import android.app.NotificationManager
+import android.app.PendingIntent
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
@@ -14,6 +15,7 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.widget.Toast
+import androidx.core.app.NotificationCompat
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
 import androidx.media3.common.PlaybackException
@@ -42,6 +44,8 @@ import com.musicplayer.app.data.PlaybackStateStore
 import com.musicplayer.app.data.PlaylistStore
 import com.musicplayer.app.data.Song
 import com.musicplayer.app.report.ErrorReporter
+import com.musicplayer.app.ui.AlarmRingingActivity
+import com.musicplayer.app.ui.AlarmStore
 import org.jaudiotagger.audio.AudioFileIO
 
 /**
@@ -76,6 +80,10 @@ class PlaybackService : MediaLibraryService() {
 
         internal const val NOTIFICATION_CHANNEL_ID = "zeno_playback"
 
+        /** Alarm channel + notification id (v1.0.13). */
+        internal const val ALARM_CHANNEL_ID = "zeno_alarm"
+        private const val ALARM_NOTIFICATION_ID = 2001
+
         /** Notification X button: stop playback, dismiss the notification
          * and stop the foreground service (handled in onStartCommand). */
         const val ACTION_CLOSE_NOTIFICATION = "com.musicplayer.app.CLOSE_NOTIFICATION"
@@ -106,6 +114,9 @@ class PlaybackService : MediaLibraryService() {
     private var replayGainCache = HashMap<Long, Float>()
 
     private var libraryCache: List<Song>? = null
+
+    /** The alarm volume ramp, if one is running (cancelled by stopAlarm). */
+    private var alarmRamp: Runnable? = null
 
     private val noisyReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
@@ -842,6 +853,17 @@ class PlaybackService : MediaLibraryService() {
                     channel.description = getString(R.string.notification_channel_desc)
                     manager.createNotificationChannel(channel)
                 }
+                // v1.0.13: alarm notifications — high importance so the
+                // full-screen ringing intent fires even from Doze / lock.
+                if (manager.getNotificationChannel(ALARM_CHANNEL_ID) == null) {
+                    val alarmChannel = NotificationChannel(
+                        ALARM_CHANNEL_ID,
+                        getString(R.string.alarm_channel_name),
+                        NotificationManager.IMPORTANCE_HIGH
+                    )
+                    alarmChannel.description = getString(R.string.alarm_channel_desc)
+                    manager.createNotificationChannel(alarmChannel)
+                }
             }
         } catch (e: Exception) {
             // Notification channel creation must never break the service.
@@ -857,12 +879,21 @@ class PlaybackService : MediaLibraryService() {
             closeFromNotification()
             return super.onStartCommand(intent, flags, startId)
         }
-        // Music alarm: start the chosen song, volume rising gradually.
-        if (intent?.action == com.musicplayer.app.ui.AlarmActivity.ACTION_ALARM) {
-            val songId = intent.getLongExtra(
-                com.musicplayer.app.ui.AlarmActivity.EXTRA_SONG_ID, -1L
-            )
-            if (songId >= 0) handleAlarm(songId)
+        // Alarm stop (from the alarm notification or the ringing screen).
+        if (intent?.action == AlarmStore.ACTION_STOP_ALARM) {
+            stopAlarm()
+            return super.onStartCommand(intent, flags, startId)
+        }
+        // Music alarm: show the alarm notification and start the chosen
+        // song, the volume rising gradually when "Volume progressif" is on.
+        if (intent?.action == AlarmStore.ACTION_ALARM) {
+            val songId = intent.getLongExtra(AlarmStore.EXTRA_SONG_ID, -1L)
+            val alarmId = intent.getStringExtra(AlarmStore.EXTRA_ALARM_ID) ?: ""
+            val alarmName = intent.getStringExtra(AlarmStore.EXTRA_ALARM_NAME)
+                ?: getString(R.string.alarm_default_name)
+            val songTitle = intent.getStringExtra(AlarmStore.EXTRA_SONG_TITLE) ?: ""
+            val fadeIn = intent.getBooleanExtra(AlarmStore.EXTRA_FADE_IN, true)
+            if (songId >= 0) handleAlarm(songId, alarmId, alarmName, songTitle, fadeIn)
         }
         return super.onStartCommand(intent, flags, startId)
     }
@@ -912,22 +943,44 @@ class PlaybackService : MediaLibraryService() {
         }
     }
 
-    /** Alarm: play the chosen song (library from that song on), starting
-     * silent and ramping the volume to the user's level over 30 seconds. */
-    private fun handleAlarm(songId: Long) {
+    /** Alarm: post the alarm notification, then play the chosen song
+     * (library from that song on). With "Volume progressif" the volume
+     * starts silent and ramps to the user's level over 30 seconds;
+     * without it the song starts at full volume at once. */
+    private fun handleAlarm(
+        songId: Long,
+        alarmId: String,
+        alarmName: String,
+        songTitle: String,
+        fadeIn: Boolean
+    ) {
         try {
             val library = MusicRepository.loadSongs(applicationContext)
             val index = library.indexOfFirst { it.id == songId }
-            if (index < 0) return
+            if (index < 0) {
+                ErrorReporter.log(
+                    ErrorReporter.TYPE_ERROR,
+                    "Alarm song not found in library (id=$songId)"
+                )
+                return
+            }
+            postAlarmNotification(alarmId, alarmName, songTitle)
             val exo = player ?: return
             PlayerConnection.songs = library
             exo.setMediaItems(library.map { PlayerConnection.toMediaItem(it) }, index, 0)
             exo.prepare()
+            val targetVolume = VolumeBoost.playerVolume()
+            val targetPercent = PlaybackStateStore.loadVolume(applicationContext)
+            if (!fadeIn) {
+                exo.volume = targetVolume
+                VlcEngine.setVolume(VolumeBoost.vlcVolumePercent(targetPercent, 1f))
+                SystemVolumeSync.applySliderPercent(targetPercent)
+                exo.play()
+                return
+            }
             exo.volume = 0f
             VlcEngine.setVolume(0)
             exo.play()
-            val targetVolume = VolumeBoost.playerVolume()
-            val targetPercent = PlaybackStateStore.loadVolume(applicationContext)
             var step = 0
             val ramp = object : Runnable {
                 override fun run() {
@@ -940,12 +993,14 @@ class PlaybackService : MediaLibraryService() {
                     if (step < 30 && exo.isPlaying) {
                         mainHandler.postDelayed(this, 1000)
                     } else {
+                        alarmRamp = null
                         exo.volume = targetVolume
                         VlcEngine.setVolume(VolumeBoost.vlcVolumePercent(targetPercent, 1f))
                         SystemVolumeSync.applySliderPercent(targetPercent)
                     }
                 }
             }
+            alarmRamp = ramp
             mainHandler.postDelayed(ramp, 1000)
         } catch (e: Exception) {
             ErrorReporter.log(
@@ -953,6 +1008,82 @@ class PlaybackService : MediaLibraryService() {
                 "Alarm start failed: ${e.message}",
                 e
             )
+        }
+    }
+
+    /** The alarm notification: high priority, full-screen ringing screen,
+     * and a clear Stop action. Posted when the alarm fires, even if the
+     * app was closed. */
+    private fun postAlarmNotification(alarmId: String, alarmName: String, songTitle: String) {
+        try {
+            val ringingIntent = Intent(this, AlarmRingingActivity::class.java).apply {
+                putExtra(AlarmStore.EXTRA_ALARM_ID, alarmId)
+                putExtra(AlarmStore.EXTRA_ALARM_NAME, alarmName)
+                putExtra(AlarmStore.EXTRA_SONG_TITLE, songTitle)
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            }
+            val ringingPending = PendingIntent.getActivity(
+                this, ALARM_NOTIFICATION_ID, ringingIntent,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
+            val stopIntent = Intent(this, PlaybackService::class.java).apply {
+                action = AlarmStore.ACTION_STOP_ALARM
+            }
+            val stopPending = PendingIntent.getService(
+                this, ALARM_NOTIFICATION_ID, stopIntent,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
+            val notification = NotificationCompat.Builder(this, ALARM_CHANNEL_ID)
+                .setSmallIcon(R.drawable.ic_alarm)
+                .setContentTitle(alarmName)
+                .setContentText(songTitle)
+                .setPriority(NotificationCompat.PRIORITY_HIGH)
+                .setCategory(NotificationCompat.CATEGORY_ALARM)
+                .setOngoing(true)
+                .setAutoCancel(false)
+                .setContentIntent(ringingPending)
+                .setFullScreenIntent(ringingPending, true)
+                .addAction(0, getString(R.string.alarm_stop), stopPending)
+                .build()
+            val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            manager.notify(ALARM_NOTIFICATION_ID, notification)
+        } catch (e: Exception) {
+            ErrorReporter.log(
+                ErrorReporter.TYPE_ERROR,
+                "Alarm notification failed: ${e.message}",
+                e
+            )
+        }
+    }
+
+    /** Stop a ringing alarm: halt the ramp, pause playback, remove the
+     * alarm notification, tell the ringing screen to close. */
+    private fun stopAlarm() {
+        try {
+            alarmRamp?.let { mainHandler.removeCallbacks(it) }
+            alarmRamp = null
+        } catch (e: Exception) {
+        }
+        try {
+            VlcEngine.stop()
+        } catch (e: Exception) {
+        }
+        try {
+            player?.pause()
+        } catch (e: Exception) {
+        }
+        try {
+            val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            manager.cancel(ALARM_NOTIFICATION_ID)
+        } catch (e: Exception) {
+        }
+        try {
+            sendBroadcast(Intent(AlarmStore.ACTION_ALARM_STOPPED))
+        } catch (e: Exception) {
+        }
+        try {
+            stopSelf()
+        } catch (e: Exception) {
         }
     }
 

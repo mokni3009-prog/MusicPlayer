@@ -60,8 +60,9 @@ import kotlinx.coroutines.launch
 
 /**
  * Zeno Play main screen (v1.0.4): brand header with the app name on ONE
- * line, 6 tabs (CHANSONS / ALBUMS / ARTISTES / PLAYLISTS / DOSSIERS /
- * PARAMÈTRES), the song library, the mini player, and the settings tab
+ * line, 7 tabs (CHANSONS / ALBUMS / ARTISTES / PLAYLISTS / ALARME /
+ * DOSSIERS / PARAMÈTRES), the song library, the mini player, and the
+ * settings tab
  * (language, formats, volume boost, notification preview, lyrics,
  * equalizer, tags, backup, battery, statistics, AMOLED, Android Auto,
  * privacy, about, updates).
@@ -79,6 +80,7 @@ class MainActivity : FullScreenActivity() {
         ALBUMS(R.string.tab_albums),
         ARTISTS(R.string.tab_artists),
         PLAYLISTS(R.string.tab_playlists),
+        ALARME(R.string.tab_alarm),
         FOLDERS(R.string.tab_folders),
         SETTINGS(R.string.tab_settings)
     }
@@ -108,6 +110,7 @@ class MainActivity : FullScreenActivity() {
     private lateinit var groupAdapter: GroupAdapter
     private lateinit var smartAdapter: GroupAdapter
     private lateinit var playlistAdapter: PlaylistAdapter
+    private lateinit var alarmScreen: AlarmScreen
     private val tabViews = mutableListOf<Pair<Tab, View>>()
 
     private var controllerFuture: ListenableFuture<MediaController>? = null
@@ -356,6 +359,7 @@ class MainActivity : FullScreenActivity() {
         binding.mainRecycler.adapter = songAdapter
 
         buildTabs()
+        alarmScreen = AlarmScreen(this, binding.alarmTab)
         buildFormatChips()
         wireSettings()
 
@@ -421,6 +425,7 @@ class MainActivity : FullScreenActivity() {
         val currentVolume = PlaybackStateStore.loadVolume(this)
         binding.volumeSeek.progress = currentVolume
         updateVolumeUi(currentVolume)
+        if (currentTab == Tab.ALARME) alarmScreen.start()
     }
 
     override fun onResume() {
@@ -441,6 +446,7 @@ class MainActivity : FullScreenActivity() {
 
     override fun onStop() {
         super.onStop()
+        alarmScreen.stop()
         PlayerConnection.removeVolumeListener(volumeSyncListener)
         com.musicplayer.app.player.VisualizerHub.removeListener(miniEqListener)
         binding.miniEq.setPlaying(false)
@@ -602,8 +608,11 @@ class MainActivity : FullScreenActivity() {
         currentTab = tab
         updateTabSelection()
         val isSettings = tab == Tab.SETTINGS
-        binding.mainRecycler.visibility = if (isSettings) View.GONE else View.VISIBLE
+        val isAlarm = tab == Tab.ALARME
+        binding.mainRecycler.visibility =
+            if (isSettings || isAlarm) View.GONE else View.VISIBLE
         binding.settingsScroll.visibility = if (isSettings) View.VISIBLE else View.GONE
+        binding.alarmContainer.visibility = if (isAlarm) View.VISIBLE else View.GONE
         binding.searchRow.visibility = if (tab == Tab.SONGS) View.VISIBLE else View.GONE
         binding.counterText.visibility = if (tab == Tab.SONGS) View.VISIBLE else View.GONE
         binding.filterBanner.visibility =
@@ -612,6 +621,7 @@ class MainActivity : FullScreenActivity() {
             Tab.ALBUMS -> GridLayoutManager(this, if (AppTheme.isTablet(this)) 3 else 2)
             else -> LinearLayoutManager(this)
         }
+        if (isAlarm) alarmScreen.start() else alarmScreen.stop()
         refreshContent()
         // Motion: light slide / stagger between tabs.
         TransitionHelper.applyTabSwitch(binding.mainRecycler, this)
@@ -722,6 +732,9 @@ class MainActivity : FullScreenActivity() {
                     )
                 }
                 groupAdapter.submitList(items)
+            }
+            Tab.ALARME -> {
+                alarmScreen.refresh()
             }
             Tab.SETTINGS -> {
                 // Static settings content; nothing to refresh here except
@@ -1031,9 +1044,6 @@ class MainActivity : FullScreenActivity() {
             val next = if (LuxuryPrefs.wrappedPeriod(this) == 0) 1 else 0
             LuxuryPrefs.setWrappedPeriod(this, next)
             refreshLuxuryLabels()
-        }
-        binding.alarmBtn.setOnClickListener {
-            TransitionHelper.startActivity(this, Intent(this, AlarmActivity::class.java))
         }
         binding.lockSwitch.isChecked = LuxuryPrefs.lockScreenEnabled(this)
         binding.lockSwitch.setOnCheckedChangeListener { _, checked ->

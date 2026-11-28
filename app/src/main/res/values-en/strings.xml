@@ -353,7 +353,7 @@
     <string name="karaoke_line">Karaoke: line by line</string>
     <string name="karaoke_word">Karaoke: word by word</string>
     <string name="luxury_doubletap">Double-tap the cover to like</string>
-    <string name="luxury_summary_title">Summary, alarm and lock</string>
+    <string name="luxury_summary_title">Summary and lock</string>
     <string name="wrapped_open">See my listening summary</string>
     <string name="luxury_lock">Full lock screen</string>
     <string name="luxury_theme">Colour theme</string>
@@ -391,6 +391,28 @@
     <string name="alarm_saved">Alarm set for %1$s.</string>
     <string name="alarm_need_permission">Allow exact alarms in the system settings.</string>
     <string name="alarm_open">Set the music alarm</string>
+    <!-- v1.0.13: the alarm is now a full alarm app (ALARME tab). -->
+    <string name="tab_alarm">ALARM</string>
+    <string name="alarm_next">Next alarm</string>
+    <string name="alarm_upcoming">Upcoming alarms</string>
+    <string name="alarm_no_alarms">No alarms yet — tap + to add one.</string>
+    <string name="alarm_no_other">No other alarms.</string>
+    <string name="alarm_new">New alarm</string>
+    <string name="alarm_edit">Edit alarm</string>
+    <string name="alarm_name">Name</string>
+    <string name="alarm_repeat">Repeat</string>
+    <string name="alarm_ringtone">Sound</string>
+    <string name="alarm_choose">Choose</string>
+    <string name="alarm_fade_in">Gradual volume</string>
+    <string name="alarm_deleted">Alarm deleted.</string>
+    <string name="alarm_in_hours">in %1$d h %2$02d</string>
+    <string name="alarm_in_minutes">in %1$d min</string>
+    <string name="alarm_once">Once only</string>
+    <string name="alarm_default_name">Alarm</string>
+    <string name="alarm_stop">Stop</string>
+    <string name="alarm_channel_name">Alarms</string>
+    <string name="alarm_channel_desc">Music alarm notifications</string>
+    <string name="alarm_ringing">Alarm</string>
     <string name="selftest_title">Self-test</string>
     <string name="selftest_desc">Checks every feature and the display, then sends the report automatically.</string>
     <string name="selftest_run">Run the self-test</string>
