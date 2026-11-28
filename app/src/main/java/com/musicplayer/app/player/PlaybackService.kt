@@ -86,9 +86,6 @@ class PlaybackService : MediaLibraryService() {
 
     private var player: ExoPlayer? = null
     private var session: MediaLibrarySession? = null
-    /** True after a notification close set the idle-notification mode to
-     * NEVER; cleared again when playback resumes (mode restored). */
-    private var idleNotificationModeChanged = false
     private var visualizer: Visualizer? = null
     private val spectrumProcessor = SpectrumAudioProcessor()
     private val gainProcessor = GainAudioProcessor()
@@ -394,23 +391,10 @@ class PlaybackService : MediaLibraryService() {
             }
         }
 
-        @OptIn(UnstableApi::class)
         override fun onPlaybackStateChanged(playbackState: Int) {
             if (playbackState == Player.STATE_ENDED) {
                 recordPlayIfListened()
                 handleTrackFinished()
-            }
-            // Playback resumed after a notification close: restore the
-            // default idle-notification behaviour (only changed by the
-            // close handler, so this runs at most once per close).
-            if (playbackState == Player.STATE_READY && idleNotificationModeChanged) {
-                idleNotificationModeChanged = false
-                try {
-                    setShowNotificationForIdlePlayer(
-                        SHOW_NOTIFICATION_FOR_IDLE_PLAYER_AFTER_STOP_OR_ERROR
-                    )
-                } catch (e: Exception) {
-                }
             }
         }
 
@@ -890,24 +874,22 @@ class PlaybackService : MediaLibraryService() {
      * Media3 1.5.1 source):
      * - The notification is ongoing, so it can never be swiped away;
      *   only this path removes it.
-     * - `player.stop()` puts the player in STATE_IDLE. That alone is
-     *   not enough: with the default idle mode
-     *   (SHOW_NOTIFICATION_FOR_IDLE_PLAYER_AFTER_STOP_OR_ERROR) the
-     *   notification manager would re-post the notification on the
-     *   next update, so the mode is switched to NEVER first — then the
-     *   manager removes the notification itself (stopForeground(true)
-     *   + cancel), with no race.
+     * - `clearMediaItems()` empties the player timeline. Media3's
+     *   notification manager removes the notification itself when the
+     *   timeline is empty (`shouldShowNotification` returns false) —
+     *   no race with a later re-post. (Simply pausing or stopping the
+     *   player would NOT remove it: with a non-empty timeline the
+     *   manager re-posts the notification on the next update.)
      * - `stopSelf()` ends the service once the app unbinds; while the
      *   app is open and bound, the service simply lingers with no
      *   notification and no playback.
-     * - Nothing is erased: the saved queue / resume position live in
-     *   PlaybackStateStore (written while playing), the in-app updater
-     *   and the error reporter run outside this service, and pressing
-     *   play again in the app restarts playback (PlayerConnection.play
-     *   re-prepares an IDLE player, and the VLC routing still applies
-     *   through onPlayerError / onMediaItemTransition).
+     * - Nothing is erased: the queue itself lives in
+     *   PlayerConnection.songs and in the saved resume state
+     *   (PlaybackStateStore, written while playing), so pressing play
+     *   again in the app restores the queue (see PlayerConnection.play)
+     *   and a fresh launch restores queue + position. The in-app
+     *   updater and the error reporter run outside this service.
      */
-    @OptIn(UnstableApi::class)
     private fun closeFromNotification() {
         try {
             VlcEngine.stop()
@@ -919,12 +901,9 @@ class PlaybackService : MediaLibraryService() {
         } catch (e: Exception) {
         }
         try {
-            setShowNotificationForIdlePlayer(SHOW_NOTIFICATION_FOR_IDLE_PLAYER_NEVER)
-            idleNotificationModeChanged = true
-        } catch (e: Exception) {
-        }
-        try {
-            player?.stop()
+            PlayerConnection.lastQueueIndex =
+                player?.currentMediaItemIndex?.coerceAtLeast(0) ?: 0
+            player?.clearMediaItems()
         } catch (e: Exception) {
         }
         try {

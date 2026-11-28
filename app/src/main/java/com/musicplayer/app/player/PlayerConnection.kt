@@ -39,6 +39,13 @@ object PlayerConnection {
     /** (songs, index) waiting for the controller to connect. */
     private var pendingPlay: Pair<List<Song>, Int>? = null
 
+    /**
+     * Queue index remembered when the notification X button clears the
+     * player timeline (see PlaybackService.closeFromNotification), so
+     * play() can restore the queue at the same song.
+     */
+    var lastQueueIndex: Int = 0
+
     /** True when a play was requested but the controller is not connected yet. */
     fun hasPendingPlay(): Boolean = pendingPlay != null
 
@@ -188,6 +195,16 @@ object PlayerConnection {
             return
         }
         val c = controller ?: return
+        if (c.mediaItemCount == 0 && songs.isNotEmpty()) {
+            // The queue was cleared by a notification close: restore it
+            // at the remembered song (the saved queue in
+            // PlaybackStateStore covers a fresh launch instead).
+            val index = lastQueueIndex.coerceIn(0, songs.size - 1)
+            c.setMediaItems(songs.map { toMediaItem(it) }, index, 0)
+            c.prepare()
+            c.play()
+            return
+        }
         // After a notification close the player is stopped (STATE_IDLE):
         // play() alone does nothing until the player is prepared again.
         if (c.playbackState == Player.STATE_IDLE) c.prepare()
