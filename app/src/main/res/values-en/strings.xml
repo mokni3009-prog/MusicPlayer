@@ -90,7 +90,7 @@
     <string name="minus_10s">−10 seconds</string>
     <string name="boost_badge">BOOST +%1$d %%</string>
     <string name="volume_boost_title">Volume boost</string>
-    <string name="volume_boost_desc">Volume can be boosted up to 200%. Above 100%, the “BOOST” badge shows that boosting is active.</string>
+    <string name="volume_boost_desc" formatted="false">Volume can be boosted up to 200%. Above 100%, the “BOOST” badge shows that boosting is active.</string>
     <string name="lyrics">Lyrics</string>
     <string name="lyrics_none">No lyrics available for this song.</string>
     <string name="lyrics_instrumental">Instrumental track</string>

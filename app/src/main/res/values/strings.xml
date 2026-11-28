@@ -90,7 +90,7 @@
     <string name="minus_10s">−10 secondes</string>
     <string name="boost_badge">BOOST +%1$d %%</string>
     <string name="volume_boost_title">Amplification du volume</string>
-    <string name="volume_boost_desc">Le volume peut être amplifié jusqu’à 200 %. Au-delà de 100 %, le badge « BOOST » indique que l’amplification est active.</string>
+    <string name="volume_boost_desc" formatted="false">Le volume peut être amplifié jusqu’à 200 %. Au-delà de 100 %, le badge « BOOST » indique que l’amplification est active.</string>
     <string name="lyrics">Paroles</string>
     <string name="lyrics_none">Aucune parole disponible pour cette chanson.</string>
     <string name="lyrics_instrumental">Morceau instrumental</string>

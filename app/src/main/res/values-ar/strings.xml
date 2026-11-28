@@ -90,7 +90,7 @@
     <string name="minus_10s">−10 ثوانٍ</string>
     <string name="boost_badge">BOOST +%1$d %%</string>
     <string name="volume_boost_title">تضخيم الصوت</string>
-    <string name="volume_boost_desc">يمكن تضخيم الصوت حتى 200%. فوق 100% تظهر شارة «BOOST» التي تدل على أن التضخيم يعمل.</string>
+    <string name="volume_boost_desc" formatted="false">يمكن تضخيم الصوت حتى 200%. فوق 100% تظهر شارة «BOOST» التي تدل على أن التضخيم يعمل.</string>
     <string name="lyrics">كلمات الأغاني</string>
     <string name="lyrics_none">لا توجد كلمات لهذه الأغنية.</string>
     <string name="lyrics_instrumental">مقطع موسيقي بلا كلمات</string>

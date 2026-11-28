@@ -5,7 +5,9 @@ plugins {
 
 android {
     namespace = "com.musicplayer.app"
-    compileSdk = 34
+    // compileSdk 36 is required by libVLC 3.7.8 (its AAR declares
+    // minCompileSdk 36); targetSdk stays 34 (no new runtime behaviour).
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "com.musicplayer.app"
@@ -15,7 +17,7 @@ android {
         versionName = "1.0.4"
     }
 
-    buildToolsVersion = "34.0.0"
+    buildToolsVersion = "36.0.0"
 
     // libVLC ships native libraries for every ABI — split the APK per ABI
     // so each device downloads only its own native code.
@@ -80,8 +82,9 @@ dependencies {
     implementation("com.google.guava:guava:32.1.2-android")
 
     // Media3 — local audio playback + media session (background playback + notification)
-    // NOTE: 1.4.1 is the newest Media3 that compiles against compileSdk 34.
-    // 1.5.0+ requires compileSdk 35, 1.11.x requires compileSdk 36.
+    // NOTE: staying on 1.4.1 (known good with this codebase); newer
+    // Media3 needs a newer compileSdk, which we now have (36), but the
+    // upgrade is out of scope for v1.0.4.
     implementation("androidx.media3:media3-exoplayer:1.4.1")
     implementation("androidx.media3:media3-session:1.4.1")
     implementation("androidx.media3:media3-common:1.4.1")
