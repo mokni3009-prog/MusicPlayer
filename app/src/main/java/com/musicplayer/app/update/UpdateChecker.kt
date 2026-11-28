@@ -143,11 +143,11 @@ object UpdateChecker {
             conn.inputStream.use { input ->
                 FileOutputStream(outFile).use { out ->
                     val buf = ByteArray(8192)
-                    var read: Int
                     var downloaded = 0L
-                    while (!downloadCancelled &&
-                        input.read(buf).also { read = it } != -1
-                    ) {
+                    while (true) {
+                        if (downloadCancelled) break
+                        val read = input.read(buf)
+                        if (read == -1) break
                         out.write(buf, 0, read)
                         downloaded += read
                         onProgress(downloaded, total)
