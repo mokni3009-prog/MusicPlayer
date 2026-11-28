@@ -66,7 +66,7 @@ class SplashActivity : FullScreenActivity() {
             } else {
                 Intent(this, MainActivity::class.java)
             }
-            startActivity(next)
+            TransitionHelper.startActivity(this, next)
             finish()
         }, SPLASH_MS)
     }
@@ -110,7 +110,12 @@ class SplashActivity : FullScreenActivity() {
         // pause with the band parked off-screen.
         val sweepRangePx = 340f * density
         val shineAnimator = ValueAnimator.ofFloat(0f, 1f).apply {
-            duration = SHINE_MS
+            // SHIMMER motion style: a fast shimmer sweep while loading.
+            duration = if (MotionStyle.effective(this@SplashActivity) == MotionStyle.SHIMMER) {
+                1200L
+            } else {
+                SHINE_MS
+            }
             repeatCount = ValueAnimator.INFINITE
             addUpdateListener { anim ->
                 val f = anim.animatedFraction

@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Gold ripple on list rows (RIPPLE motion style). -->
+<ripple xmlns:android="http://schemas.android.com/apk/res/android"
+    android:color="#40FFD76A">
+    <item android:id="@android:id/mask" android:drawable="@drawable/bg_card" />
+</ripple>

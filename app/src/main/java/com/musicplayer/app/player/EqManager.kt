@@ -153,6 +153,24 @@ object EqManager {
         }
     }
 
+    /** Applies given levels + bass to the live EQ without persisting them
+     * (per-song settings: the song's own EQ, not the global output one). */
+    fun applyLevelsNow(context: Context, levelsDb: FloatArray, bass: Int) {
+        val eq = equalizer ?: return
+        try {
+            if (!isEnabled(context)) return
+            applyLevels(eq, levelsDb)
+            bassBoost?.setStrength((bass.coerceIn(0, 100) * 10).toShort())
+            VlcEngine.applyEqualizer(levelsDb)
+        } catch (e: Exception) {
+            ErrorReporter.log(
+                ErrorReporter.TYPE_ERROR,
+                "EQ per-song apply failed: ${e.message}",
+                e
+            )
+        }
+    }
+
     fun setLevels(context: Context, levelsDb: FloatArray) {
         saveLevels(context, currentOutput, levelsDb)
         savePreset(context, currentOutput, "Personnalisé")

@@ -36,9 +36,13 @@ class RingtoneActivity : FullScreenActivity() {
         const val EXTRA_SONG_ID = "song_id"
 
         fun start(context: Context, songId: Long) {
+            context.startActivity(intent(context, songId))
+        }
+
+        fun intent(context: Context, songId: Long): Intent {
             val intent = Intent(context, RingtoneActivity::class.java)
             intent.putExtra(EXTRA_SONG_ID, songId)
-            context.startActivity(intent)
+            return intent
         }
     }
 

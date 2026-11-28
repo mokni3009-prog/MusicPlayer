@@ -26,6 +26,14 @@ object VolumeBoost {
     @Volatile
     var volumePercent: Int = 80
 
+    /** Stereo balance: -1.0 (full left) .. 0 (centre) .. +1.0 (full right). */
+    @Volatile
+    var balance: Float = 0f
+
+    /** Mono mode: both channels play the L+R mix. */
+    @Volatile
+    var mono: Boolean = false
+
     fun setVolumePercent(percent: Int) {
         volumePercent = percent.coerceIn(0, 200)
         boostGain = if (volumePercent > 100) volumePercent / 100f else 1.0f

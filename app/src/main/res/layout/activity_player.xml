@@ -2,11 +2,30 @@
 <!-- Full player — Zeno Play v1.0.4. Rotating circular cover, live visualizer,
      transport (-10s, shuffle, prev, play, next, repeat), volume 0-200% + BOOST,
      speed, sleep timer, A-B repeat, play-once, synced lyrics, reorderable queue. -->
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+    <!-- Blurred cover background (luxury option): the current cover,
+         blurred + dimmed, behind the whole player. -->
+    <ImageView
+        android:id="@+id/playerBg"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:scaleType="centerCrop"
+        android:visibility="gone" />
+
+    <View
+        android:id="@+id/playerBgDim"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="#CC060D21"
+        android:visibility="gone" />
+
+<LinearLayout
+    android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@drawable/bg_app"
     android:orientation="vertical">
 
     <LinearLayout
@@ -81,6 +100,7 @@
             <!-- Circular smoke ring around the disc (gold->cyan mist,
                  driven by the real FFT; replaces the old straight bars). -->
             <FrameLayout
+                android:id="@+id/discContainer"
                 android:layout_width="match_parent"
                 android:layout_height="300dp"
                 android:layout_marginTop="6dp">
@@ -90,11 +110,19 @@
                     android:layout_width="match_parent"
                     android:layout_height="match_parent" />
 
+                <!-- Golden particles (luxury option / PARTICLES motion). -->
+                <com.musicplayer.app.ui.ParticlesView
+                    android:id="@+id/particlesView"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:visibility="gone" />
+
                 <com.google.android.material.card.MaterialCardView
                     android:id="@+id/discCard"
                     android:layout_width="220dp"
                     android:layout_height="220dp"
                     android:layout_gravity="center"
+                    android:transitionName="cover"
                     app:cardCornerRadius="110dp"
                     app:cardElevation="0dp"
                     app:strokeColor="#FFD76A"
@@ -108,6 +136,16 @@
                         android:src="@drawable/zeno_logo_transparent" />
 
                 </com.google.android.material.card.MaterialCardView>
+
+                <!-- Flying heart for double-tap to like. -->
+                <ImageView
+                    android:id="@+id/flyingHeart"
+                    android:layout_width="72dp"
+                    android:layout_height="72dp"
+                    android:layout_gravity="center"
+                    android:src="@drawable/ic_heart_filled"
+                    android:tint="#FF6FA5"
+                    android:visibility="gone" />
 
             </FrameLayout>
 
@@ -453,6 +491,50 @@
                 android:textSize="17sp"
                 android:textStyle="bold" />
 
+            <!-- Lyrics search: find a line, jump to it (tap a line seeks). -->
+            <LinearLayout
+                android:id="@+id/lyricsSearchRow"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:visibility="gone">
+
+                <EditText
+                    android:id="@+id/lyricsSearch"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:background="@drawable/bg_input"
+                    android:hint="@string/lyrics_search_hint"
+                    android:imeOptions="actionSearch"
+                    android:inputType="text"
+                    android:paddingStart="12dp"
+                    android:paddingTop="8dp"
+                    android:paddingEnd="12dp"
+                    android:paddingBottom="8dp"
+                    android:textColor="@color/zeno_ink"
+                    android:textColorHint="@color/zeno_ink3"
+                    android:textSize="14sp" />
+
+                <TextView
+                    android:id="@+id/lyricsNextMatch"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="8dp"
+                    android:background="@drawable/bg_chip"
+                    android:paddingStart="12dp"
+                    android:paddingTop="8dp"
+                    android:paddingEnd="12dp"
+                    android:paddingBottom="8dp"
+                    android:text="@string/lyrics_next"
+                    android:textColor="@color/zeno_cyan"
+                    android:textSize="13sp"
+                    android:textStyle="bold" />
+
+            </LinearLayout>
+
             <TextView
                 android:id="@+id/lyricsStatus"
                 android:layout_width="match_parent"
@@ -545,3 +627,4 @@
     </ScrollView>
 
 </LinearLayout>
+</FrameLayout>

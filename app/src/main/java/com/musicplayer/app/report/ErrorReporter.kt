@@ -50,6 +50,8 @@ object ErrorReporter {
     const val TYPE_NOTIFICATION = "notification"
     const val TYPE_NETWORK = "network"
     const val TYPE_ERROR = "error"
+    /** Temporary self-test reports (see SelfTest.kt — deletable module). */
+    const val TYPE_SELF_TEST = "self-test"
 
     private const val TAG = "ErrorReporter"
     private const val ENDPOINT = "https://zeno-crash-reporter.streammaster.workers.dev/report"

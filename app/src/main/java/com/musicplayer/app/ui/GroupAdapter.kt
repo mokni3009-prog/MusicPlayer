@@ -70,6 +70,15 @@ class GroupAdapter(
         return holder
     }
 
+    /** Gold ripple foreground when the RIPPLE motion style is selected. */
+    private fun rippleForeground(context: android.content.Context): android.graphics.drawable.Drawable? {
+        return if (MotionStyle.effective(context) == MotionStyle.RIPPLE) {
+            androidx.core.content.ContextCompat.getDrawable(context, R.drawable.ripple_gold)
+        } else {
+            null
+        }
+    }
+
     override fun onBindViewHolder(holder: RecyclerView.ViewHolder, position: Int) {
         val item = items[position]
         if (holder is CardHolder) {
@@ -77,6 +86,7 @@ class GroupAdapter(
             holder.binding.cardRoot.setBackgroundResource(bg)
             holder.binding.playlistName.text = item.title
             holder.binding.playlistSub.text = item.subtitle
+            holder.binding.root.foreground = rippleForeground(holder.itemView.context)
             holder.binding.root.setOnClickListener { onClick(item) }
             holder.binding.root.setOnLongClickListener {
                 onLongClick?.invoke(item)
@@ -85,6 +95,7 @@ class GroupAdapter(
         } else if (holder is RowHolder) {
             val tileBg = TILE_BGS[(item.id.hashCode() and Int.MAX_VALUE) % TILE_BGS.size]
             holder.binding.root.setBackgroundResource(R.drawable.bg_card_focus)
+            holder.binding.root.foreground = rippleForeground(holder.itemView.context)
             holder.binding.tileView.setBackgroundResource(tileBg)
             holder.binding.tileLetter.text = item.title.firstOrNull()?.toString() ?: "♪"
             holder.binding.groupTitle.text = item.title

@@ -10,6 +10,8 @@
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"
         android:maxSdkVersion="32" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
 
     <!-- Android TV: leanback is optional (same APK also runs on phones/tablets),
          touchscreen is optional (TV has no touchscreen). -->
@@ -96,6 +98,35 @@
             android:screenOrientation="portrait"
             android:parentActivityName=".ui.PlayerActivity" />
 
+        <!-- Luxury: listening summary (Wrapped). -->
+        <activity
+            android:name=".ui.WrappedActivity"
+            android:exported="false"
+            android:screenOrientation="portrait"
+            android:parentActivityName=".ui.MainActivity" />
+
+        <!-- Luxury: music alarm. -->
+        <activity
+            android:name=".ui.AlarmActivity"
+            android:exported="false"
+            android:screenOrientation="portrait"
+            android:parentActivityName=".ui.MainActivity" />
+
+        <!-- Luxury: full lock screen (shown over the lock screen). -->
+        <activity
+            android:name=".ui.LockActivity"
+            android:exported="false"
+            android:screenOrientation="portrait"
+            android:showWhenLocked="true"
+            android:turnScreenOn="true" />
+
+        <!-- TEMPORARY self-test screen (see SelfTest.kt) — deletable. -->
+        <activity
+            android:name=".ui.SelfTestActivity"
+            android:exported="false"
+            android:screenOrientation="portrait"
+            android:parentActivityName=".ui.MainActivity" />
+
         <service
             android:name=".player.PlaybackService"
             android:exported="true"
@@ -135,6 +166,11 @@
 
         <receiver
             android:name=".widget.WidgetActionReceiver"
+            android:exported="false" />
+
+        <!-- Music alarm. -->
+        <receiver
+            android:name=".ui.AlarmReceiver"
             android:exported="false" />
 
         <!-- Android Auto: declares this app as a media app for cars. -->

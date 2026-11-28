@@ -17,6 +17,7 @@
         <item name="android:textColor">@color/zeno_ink</item>
         <item name="android:textColorSecondary">@color/zeno_ink2</item>
         <item name="android:windowFullscreen">true</item>
+        <item name="android:windowContentTransitions">true</item>
         <item name="android:windowTranslucentStatus">true</item>
         <item name="android:windowTranslucentNavigation">true</item>
         <item name="android:statusBarColor">@android:color/transparent</item>

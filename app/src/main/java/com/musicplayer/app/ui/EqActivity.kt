@@ -7,8 +7,13 @@ import android.view.View
 import android.widget.SeekBar
 import android.widget.TextView
 import com.musicplayer.app.R
+import com.musicplayer.app.data.PerSongAudioStore
+import com.musicplayer.app.data.PlaybackStateStore
 import com.musicplayer.app.databinding.ActivityEqBinding
 import com.musicplayer.app.player.EqManager
+import com.musicplayer.app.player.PlayerConnection
+import com.musicplayer.app.player.ReverbManager
+import com.musicplayer.app.player.VolumeBoost
 
 /**
  * Real equalizer — 5 bands + bass boost + presets, with a setting per
@@ -19,8 +24,10 @@ class EqActivity : FullScreenActivity() {
 
     companion object {
         fun start(context: Context) {
-            context.startActivity(Intent(context, EqActivity::class.java))
+            context.startActivity(intent(context))
         }
+
+        fun intent(context: Context) = Intent(context, EqActivity::class.java)
     }
 
     private lateinit var binding: ActivityEqBinding
@@ -29,6 +36,9 @@ class EqActivity : FullScreenActivity() {
     private var enabled = false
     private var preset = "Normal"
     private val bandViews = mutableListOf<BandRow>()
+    /** The song being edited: its EQ is remembered per song. */
+    private var currentSongId: Long = -1L
+    private var reverbPreset = ReverbManager.PRESET_NONE
 
     private data class BandRow(val value: TextView, val seek: SeekBar)
 
@@ -45,6 +55,77 @@ class EqActivity : FullScreenActivity() {
         bass = EqManager.currentBass(this)
         enabled = EqManager.isEnabled(this)
         preset = EqManager.currentPresetName(this)
+
+        // Per-song settings: if the current song remembers its own EQ,
+        // show (and apply) that instead of the global settings.
+        currentSongId = PlayerConnection.currentSong()?.id ?: -1L
+        val savedPerSong = if (currentSongId >= 0) {
+            PerSongAudioStore.get(this, currentSongId)
+        } else {
+            null
+        }
+        if (savedPerSong != null) {
+            savedPerSong.bandsDb?.let {
+                if (it.size == 5) {
+                    bands = it.copyOf()
+                    EqManager.setLevels(this, bands)
+                }
+            }
+            savedPerSong.bass?.let {
+                bass = it
+                EqManager.setBass(this, it)
+            }
+            savedPerSong.preset?.let { preset = it }
+        }
+
+        // Stereo balance + Mono (live via the gain processor; Mono on VLC
+        // applies from the next VLC track).
+        VolumeBoost.balance = PlaybackStateStore.loadBalance(this)
+        VolumeBoost.mono = PlaybackStateStore.loadMono(this)
+        binding.balanceSeek.progress =
+            ((VolumeBoost.balance + 1f) / 2f * 200f).toInt().coerceIn(0, 200)
+        updateBalanceLabel(VolumeBoost.balance)
+        binding.balanceSeek.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(s: SeekBar?, progress: Int, fromUser: Boolean) {
+                if (!fromUser) return
+                val balance = progress / 100f - 1f
+                VolumeBoost.balance = balance
+                PlaybackStateStore.saveBalance(this@EqActivity, balance)
+                updateBalanceLabel(balance)
+            }
+
+            override fun onStartTrackingTouch(s: SeekBar?) {}
+            override fun onStopTrackingTouch(s: SeekBar?) {}
+        })
+        binding.monoSwitch.isChecked = VolumeBoost.mono
+        binding.monoSwitch.setOnCheckedChangeListener { _, checked ->
+            VolumeBoost.mono = checked
+            PlaybackStateStore.saveMono(this, checked)
+        }
+
+        // Reverb sound effects (Media3 only).
+        reverbPreset = ReverbManager.loadPreset(this)
+        val reverbs = listOf(
+            ReverbManager.PRESET_NONE to R.string.reverb_none,
+            ReverbManager.PRESET_SMALL_ROOM to R.string.reverb_small_room,
+            ReverbManager.PRESET_STUDIO to R.string.reverb_studio,
+            ReverbManager.PRESET_CONCERT_HALL to R.string.reverb_concert_hall
+        )
+        binding.reverbContainer.removeAllViews()
+        for ((value, labelRes) in reverbs) {
+            val chip = layoutInflater.inflate(
+                R.layout.item_eq_preset, binding.reverbContainer, false
+            ) as TextView
+            chip.text = getString(labelRes)
+            chip.tag = value
+            chip.isSelected = value == reverbPreset
+            chip.setOnClickListener {
+                reverbPreset = value
+                ReverbManager.setPreset(this, value)
+                refreshReverbChips()
+            }
+            binding.reverbContainer.addView(chip)
+        }
 
         binding.outputLabel.text = getString(R.string.eq_output_label, outputLabel(EqManager.currentOutput))
         binding.enableSwitch.isChecked = enabled
@@ -74,6 +155,7 @@ class EqActivity : FullScreenActivity() {
                     value.text = formatDb(bands[index])
                     preset = getString(R.string.eq_preset_custom)
                     EqManager.setLevels(this@EqActivity, bands)
+                    savePerSong()
                     refreshPresetChips()
                 }
 
@@ -93,6 +175,7 @@ class EqActivity : FullScreenActivity() {
                 bass = progress
                 binding.bassValue.text = "$progress%"
                 EqManager.setBass(this@EqActivity, progress)
+                savePerSong()
             }
 
             override fun onStartTrackingTouch(s: SeekBar?) {}
@@ -119,6 +202,7 @@ class EqActivity : FullScreenActivity() {
                 preset = name
                 EqManager.setPreset(this, name)
                 bands = EqManager.currentBandsDb(this)
+                savePerSong()
                 refreshBandViews()
                 refreshPresetChips()
             }
@@ -158,6 +242,27 @@ class EqActivity : FullScreenActivity() {
         for (i in bandViews.indices) {
             bandViews[i].seek.progress = (bands[i] + 12).toInt().coerceIn(0, 24)
             bandViews[i].value.text = formatDb(bands[i])
+        }
+    }
+
+    /** Remembers the EQ for the current song (bands + bass + preset). */
+    private fun savePerSong() {
+        if (currentSongId < 0) return
+        PerSongAudioStore.saveEq(this, currentSongId, bands.copyOf(), bass, preset)
+    }
+
+    private fun updateBalanceLabel(balance: Float) {
+        binding.balanceValue.text = when {
+            balance < -0.05f -> getString(R.string.balance_left)
+            balance > 0.05f -> getString(R.string.balance_right)
+            else -> getString(R.string.balance_center)
+        }
+    }
+
+    private fun refreshReverbChips() {
+        for (i in 0 until binding.reverbContainer.childCount) {
+            val chip = binding.reverbContainer.getChildAt(i) as TextView
+            chip.isSelected = (chip.tag as? Int) == reverbPreset
         }
     }
 

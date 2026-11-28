@@ -29,6 +29,10 @@ object PlaybackStateStore {
     private const val KEY_LISTEN_SECONDS = "listen_seconds"
     private const val KEY_REPEAT_MODE = "repeat_mode"
     private const val KEY_SHUFFLE = "shuffle"
+    private const val KEY_BALANCE = "balance"
+    private const val KEY_MONO = "mono"
+    private const val KEY_PLAY_EVENTS = "play_events"
+    private const val MAX_PLAY_EVENTS = 2000
 
     data class SavedQueue(
         val songIds: List<Long>,
@@ -100,6 +104,40 @@ object PlaybackStateStore {
         }
     }
 
+    fun saveBalance(context: Context, balance: Float) {
+        try {
+            context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+                .edit().putFloat(KEY_BALANCE, balance.coerceIn(-1f, 1f)).apply()
+        } catch (e: Exception) {
+        }
+    }
+
+    fun loadBalance(context: Context): Float {
+        return try {
+            context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+                .getFloat(KEY_BALANCE, 0f)
+        } catch (e: Exception) {
+            0f
+        }
+    }
+
+    fun saveMono(context: Context, mono: Boolean) {
+        try {
+            context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+                .edit().putBoolean(KEY_MONO, mono).apply()
+        } catch (e: Exception) {
+        }
+    }
+
+    fun loadMono(context: Context): Boolean {
+        return try {
+            context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+                .getBoolean(KEY_MONO, false)
+        } catch (e: Exception) {
+            false
+        }
+    }
+
     fun saveRepeatShuffle(context: Context, repeatMode: Int, shuffle: Boolean) {
         try {
             context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
@@ -136,12 +174,46 @@ object PlaybackStateStore {
                 .putString(KEY_PLAY_COUNTS, JSONObject(counts.mapKeys { it.key.toString() }).toString())
                 .putString(KEY_LAST_PLAYED, JSONObject(last.mapKeys { it.key.toString() }).toString())
                 .apply()
+            // Play event log for the Wrapped summary (capped, oldest dropped).
+            appendPlayEvent(context, songId)
         } catch (e: Exception) {
             ErrorReporter.log(
                 ErrorReporter.TYPE_DATABASE,
                 "Play count save failed: ${e.message}",
                 e
             )
+        }
+    }
+
+    /** One play event: (songId, timestamp). For the Wrapped summary. */
+    data class PlayEvent(val songId: Long, val timestampMs: Long)
+
+    private fun appendPlayEvent(context: Context, songId: Long) {
+        try {
+            val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            val raw = prefs.getString(KEY_PLAY_EVENTS, null)
+            val arr = if (raw.isNullOrBlank()) JSONArray() else JSONArray(raw)
+            val event = JSONObject()
+            event.put("id", songId)
+            event.put("ts", System.currentTimeMillis())
+            arr.put(event)
+            while (arr.length() > MAX_PLAY_EVENTS) arr.remove(0)
+            prefs.edit().putString(KEY_PLAY_EVENTS, arr.toString()).apply()
+        } catch (e: Exception) {
+        }
+    }
+
+    fun playEvents(context: Context): List<PlayEvent> {
+        return try {
+            val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            val raw = prefs.getString(KEY_PLAY_EVENTS, null) ?: return emptyList()
+            val arr = JSONArray(raw)
+            (0 until arr.length()).mapNotNull { i ->
+                val obj = arr.optJSONObject(i) ?: return@mapNotNull null
+                PlayEvent(obj.optLong("id", -1L), obj.optLong("ts", 0L))
+            }.filter { it.songId >= 0 && it.timestampMs > 0 }
+        } catch (e: Exception) {
+            emptyList()
         }
     }
 

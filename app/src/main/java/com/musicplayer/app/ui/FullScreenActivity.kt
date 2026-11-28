@@ -40,6 +40,18 @@ abstract class FullScreenActivity : AppCompatActivity() {
         applyImmersive()
     }
 
+    override fun onPostCreate(savedInstanceState: Bundle?) {
+        super.onPostCreate(savedInstanceState)
+        // Motion: the entry effect for the chosen motion style.
+        TransitionHelper.applyEnterEffect(this)
+    }
+
+    override fun finish() {
+        super.finish()
+        // Motion: the return animation (skipped for shared-element returns).
+        TransitionHelper.applyExit(this)
+    }
+
     override fun onResume() {
         super.onResume()
         applyImmersive()

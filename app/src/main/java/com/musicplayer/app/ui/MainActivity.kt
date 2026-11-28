@@ -309,6 +309,12 @@ class MainActivity : FullScreenActivity() {
         }
     }
 
+    /** Feeds the mini-player waveform (the chosen shape) with the
+     * live spectrum — same data as the full player. */
+    private val miniEqListener: (FloatArray) -> Unit = { magnitudes ->
+        binding.miniEq.updateMagnitudes(magnitudes)
+    }
+
     // ----- lifecycle -----
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -361,8 +367,22 @@ class MainActivity : FullScreenActivity() {
         binding.miniNext.setOnClickListener { PlayerConnection.next() }
         binding.miniPrev.setOnClickListener { PlayerConnection.previous() }
         binding.miniOpen.setOnClickListener {
-            startActivity(Intent(this, PlayerActivity::class.java))
+            // Shared element: the cover grows into the full-player disc.
+            TransitionHelper.startActivity(
+                this,
+                Intent(this, PlayerActivity::class.java),
+                sharedView = binding.miniCover,
+                sharedName = "cover"
+            )
         }
+
+        // Theme colours on the brand name (gold -> cyan by default).
+        val (accent, secondary) = ThemeColors.current(this)
+        binding.brandName.paint.shader = android.graphics.LinearGradient(
+            0f, 0f, binding.brandName.paint.measureText("Zeno Play"), 0f,
+            intArrayOf(accent, secondary),
+            null, android.graphics.Shader.TileMode.CLAMP
+        )
 
         requestPermissionsIfNeeded()
     }
@@ -371,6 +391,9 @@ class MainActivity : FullScreenActivity() {
         super.onStart()
         connectController()
         handler.post(progressRunnable)
+        // Animated equalizer in the mini player (luxury option).
+        com.musicplayer.app.player.VisualizerHub.addListener(miniEqListener)
+        binding.miniEq.setMode(WaveformStyle.current(this))
         favorites = FavoritesStore.getFavorites(this)
         playlists = PlaylistStore.load(this)
         refreshContent()
@@ -394,6 +417,8 @@ class MainActivity : FullScreenActivity() {
 
     override fun onStop() {
         super.onStop()
+        com.musicplayer.app.player.VisualizerHub.removeListener(miniEqListener)
+        binding.miniEq.setPlaying(false)
         PlayerConnection.controller?.removeListener(playerListener)
         handler.removeCallbacks(progressRunnable)
     }
@@ -535,12 +560,13 @@ class MainActivity : FullScreenActivity() {
     }
 
     private fun updateTabSelection() {
+        val (accent, _) = ThemeColors.current(this)
         for ((tab, container) in tabViews) {
             val selected = tab == currentTab
             val label = (container as LinearLayout).getChildAt(0) as TextView
             val underline = container.getChildAt(1)
             label.setTextColor(
-                getColor(if (selected) R.color.zeno_gold else R.color.zeno_ink2)
+                if (selected) accent else getColor(R.color.zeno_ink2)
             )
             underline.visibility = if (selected) View.VISIBLE else View.INVISIBLE
         }
@@ -561,6 +587,8 @@ class MainActivity : FullScreenActivity() {
             else -> LinearLayoutManager(this)
         }
         refreshContent()
+        // Motion: light slide / stagger between tabs.
+        TransitionHelper.applyTabSwitch(binding.mainRecycler, this)
     }
 
     // ----- content -----
@@ -711,7 +739,7 @@ class MainActivity : FullScreenActivity() {
     private fun openPlaylist(playlist: Playlist) {
         val intent = Intent(this, PlaylistDetailActivity::class.java)
         intent.putExtra(PlaylistDetailActivity.EXTRA_PLAYLIST_ID, playlist.id)
-        startActivity(intent)
+        TransitionHelper.startActivity(this, intent)
     }
 
     private fun confirmDeletePlaylist(playlist: Playlist) {
@@ -742,15 +770,11 @@ class MainActivity : FullScreenActivity() {
     }
 
     private fun openTagEditor(song: Song) {
-        val intent = Intent(this, TagEditActivity::class.java)
-        intent.putExtra(TagEditActivity.EXTRA_SONG_IDS, longArrayOf(song.id))
-        startActivity(intent)
+        TransitionHelper.startActivity(this, TagEditActivity.intent(this, listOf(song.id)))
     }
 
     private fun openRingtone(song: Song) {
-        val intent = Intent(this, RingtoneActivity::class.java)
-        intent.putExtra(RingtoneActivity.EXTRA_SONG_ID, song.id)
-        startActivity(intent)
+        TransitionHelper.startActivity(this, RingtoneActivity.intent(this, song.id))
     }
 
     // ----- mini player -----
@@ -769,6 +793,13 @@ class MainActivity : FullScreenActivity() {
         binding.miniPlayPause.setImageResource(
             if (PlayerConnection.isPlaying()) R.drawable.ic_pause else R.drawable.ic_play
         )
+        // Mini waveform: the chosen shape, visible + animated while
+        // playing (luxury option).
+        val miniEqOn = LuxuryPrefs.miniEqEnabled(this)
+        binding.miniEq.visibility =
+            if (miniEqOn && PlayerConnection.isPlaying()) View.VISIBLE else View.GONE
+        binding.miniEq.setMode(WaveformStyle.current(this))
+        binding.miniEq.setPlaying(PlayerConnection.isPlaying())
         val index = PlayerConnection.currentIndex()
         val total = PlayerConnection.songs.size
         binding.miniPosition.text =
@@ -876,13 +907,129 @@ class MainActivity : FullScreenActivity() {
         }
 
         binding.eqOpenBtn.setOnClickListener {
-            startActivity(Intent(this, EqActivity::class.java))
+            TransitionHelper.startActivity(this, EqActivity.intent(this))
         }
         binding.tagsOpenBtn.setOnClickListener {
-            startActivity(Intent(this, TagEditActivity::class.java))
+            TransitionHelper.startActivity(this, TagEditActivity.intent(this, emptyList()))
         }
         binding.statsOpenBtn.setOnClickListener {
-            startActivity(Intent(this, StatsActivity::class.java))
+            TransitionHelper.startActivity(this, StatsActivity.intent(this))
+        }
+
+        // Motion style picker (22 types + the luxurious default).
+        refreshMotionLabel()
+        binding.motionCard.setOnClickListener { showMotionDialog() }
+
+        // Waveform shape picker (20 shapes, default = circular smoke).
+        // The shape applies everywhere at once: full player AND the
+        // mini player on the main screen.
+        refreshWaveformLabel()
+        binding.waveformCard.setOnClickListener { showWaveformDialog() }
+
+        // Luxury options.
+        refreshLuxuryLabels()
+        binding.blurSwitch.isChecked = LuxuryPrefs.blurEnabled(this)
+        binding.blurSwitch.setOnCheckedChangeListener { _, checked ->
+            LuxuryPrefs.setBlurEnabled(this, checked)
+        }
+        binding.blurStrengthBtn.setOnClickListener {
+            showThreeChoiceDialog(
+                R.string.luxury_blur,
+                listOf(R.string.blur_light, R.string.blur_medium, R.string.blur_strong),
+                LuxuryPrefs.blurStrength(this)
+            ) { LuxuryPrefs.setBlurStrength(this, it); refreshLuxuryLabels() }
+        }
+        binding.gyroSwitch.isChecked = LuxuryPrefs.gyroEnabled(this)
+        binding.gyroSwitch.setOnCheckedChangeListener { _, checked ->
+            LuxuryPrefs.setGyroEnabled(this, checked)
+        }
+        binding.gyroSensBtn.setOnClickListener {
+            showThreeChoiceDialog(
+                R.string.luxury_gyro,
+                listOf(
+                    R.string.sensitivity_low, R.string.sensitivity_medium,
+                    R.string.sensitivity_high
+                ),
+                LuxuryPrefs.gyroSensitivity(this)
+            ) { LuxuryPrefs.setGyroSensitivity(this, it); refreshLuxuryLabels() }
+        }
+        binding.hapticsSwitch.isChecked = LuxuryPrefs.hapticsEnabled(this)
+        binding.hapticsSwitch.setOnCheckedChangeListener { _, checked ->
+            LuxuryPrefs.setHapticsEnabled(this, checked)
+        }
+        binding.hapticsStrengthBtn.setOnClickListener {
+            showThreeChoiceDialog(
+                R.string.luxury_haptics,
+                listOf(R.string.strength_light, R.string.strength_medium, R.string.strength_strong),
+                LuxuryPrefs.hapticsStrength(this)
+            ) { LuxuryPrefs.setHapticsStrength(this, it); refreshLuxuryLabels() }
+        }
+        binding.particlesSwitch.isChecked = LuxuryPrefs.particlesEnabled(this)
+        binding.particlesSwitch.setOnCheckedChangeListener { _, checked ->
+            LuxuryPrefs.setParticlesEnabled(this, checked)
+        }
+        binding.particlesDensityBtn.setOnClickListener {
+            showThreeChoiceDialog(
+                R.string.luxury_particles,
+                listOf(R.string.density_few, R.string.density_medium, R.string.density_many),
+                LuxuryPrefs.particlesDensity(this)
+            ) { LuxuryPrefs.setParticlesDensity(this, it); refreshLuxuryLabels() }
+        }
+        binding.miniEqSwitch.isChecked = LuxuryPrefs.miniEqEnabled(this)
+        binding.miniEqSwitch.setOnCheckedChangeListener { _, checked ->
+            LuxuryPrefs.setMiniEqEnabled(this, checked)
+            updateMiniPlayer()
+        }
+        binding.miniEqStyleBtn.setOnClickListener { showWaveformDialog() }
+        binding.karaokeBtn.setOnClickListener {
+            val next = if (LuxuryPrefs.karaokeMode(this) == 0) 1 else 0
+            LuxuryPrefs.setKaraokeMode(this, next)
+            refreshLuxuryLabels()
+        }
+        binding.doubletapSwitch.isChecked = LuxuryPrefs.doubleTapLikeEnabled(this)
+        binding.doubletapSwitch.setOnCheckedChangeListener { _, checked ->
+            LuxuryPrefs.setDoubleTapLikeEnabled(this, checked)
+        }
+        binding.wrappedBtn.setOnClickListener {
+            TransitionHelper.startActivity(this, Intent(this, WrappedActivity::class.java))
+        }
+        binding.wrappedPeriodBtn.setOnClickListener {
+            val next = if (LuxuryPrefs.wrappedPeriod(this) == 0) 1 else 0
+            LuxuryPrefs.setWrappedPeriod(this, next)
+            refreshLuxuryLabels()
+        }
+        binding.alarmBtn.setOnClickListener {
+            TransitionHelper.startActivity(this, Intent(this, AlarmActivity::class.java))
+        }
+        binding.lockSwitch.isChecked = LuxuryPrefs.lockScreenEnabled(this)
+        binding.lockSwitch.setOnCheckedChangeListener { _, checked ->
+            LuxuryPrefs.setLockScreenEnabled(this, checked)
+        }
+        binding.themeBtn.setOnClickListener {
+            val modes = listOf(
+                ThemeColors.MODE_ZENO to R.string.theme_zeno,
+                ThemeColors.MODE_PINK to R.string.theme_pink,
+                ThemeColors.MODE_AUTO to R.string.theme_auto
+            )
+            val labels = modes.map { getString(it.second) }.toTypedArray()
+            val checked = modes.indexOfFirst { it.first == LuxuryPrefs.themeMode(this) }
+                .coerceAtLeast(0)
+            androidx.appcompat.app.AlertDialog.Builder(this)
+                .setTitle(R.string.luxury_theme)
+                .setSingleChoiceItems(labels, checked) { dialog, which ->
+                    LuxuryPrefs.setThemeMode(this, modes[which].first)
+                    refreshLuxuryLabels()
+                    updateTabSelection()
+                    recreate()
+                    dialog.dismiss()
+                }
+                .setNegativeButton(R.string.cancel, null)
+                .show()
+        }
+
+        // Self-test (temporary module — see SelfTest.kt).
+        binding.selftestBtn.setOnClickListener {
+            TransitionHelper.startActivity(this, Intent(this, SelfTestActivity::class.java))
         }
 
         binding.backupExportBtn.setOnClickListener {
@@ -908,6 +1055,116 @@ class MainActivity : FullScreenActivity() {
             AppTheme.setAmoled(this, checked)
             recreate()
         }
+    }
+
+    private fun refreshMotionLabel() {
+        binding.motionValue.text = getString(MotionStyle.current(this).labelRes)
+    }
+
+    private fun refreshWaveformLabel() {
+        binding.waveformValue.text = getString(
+            WaveformStyle.LABELS[WaveformStyle.current(this)]
+        )
+    }
+
+    /** Waveform shape picker (20 shapes): the choice applies
+     * immediately to the full player AND to the mini player on the
+     * main screen. */
+    private fun showWaveformDialog() {
+        val labels = WaveformStyle.LABELS.map { getString(it) }.toTypedArray()
+        val checked = WaveformStyle.current(this)
+        androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle(R.string.waveform_title)
+            .setSingleChoiceItems(labels, checked) { dialog, which ->
+                WaveformStyle.set(this, which)
+                binding.miniEq.setMode(which)
+                refreshWaveformLabel()
+                refreshLuxuryLabels()
+                dialog.dismiss()
+            }
+            .setNegativeButton(R.string.cancel, null)
+            .show()
+    }
+
+    private fun showMotionDialog() {
+        val styles = MotionStyle.values()
+        val labels = styles.map { getString(it.labelRes) }.toTypedArray()
+        val checked = styles.indexOf(MotionStyle.current(this)).coerceAtLeast(0)
+        androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle(R.string.motion_title)
+            .setSingleChoiceItems(labels, checked) { dialog, which ->
+                MotionStyle.set(this, styles[which])
+                refreshMotionLabel()
+                dialog.dismiss()
+            }
+            .setNegativeButton(R.string.cancel, null)
+            .show()
+    }
+
+    /** A 3-option picker (light/medium/strong etc.) for luxury settings. */
+    private fun showThreeChoiceDialog(
+        titleRes: Int,
+        optionRes: List<Int>,
+        checked: Int,
+        onPick: (Int) -> Unit
+    ) {
+        val labels = optionRes.map { getString(it) }.toTypedArray()
+        androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle(titleRes)
+            .setSingleChoiceItems(labels, checked) { dialog, which ->
+                onPick(which)
+                dialog.dismiss()
+            }
+            .setNegativeButton(R.string.cancel, null)
+            .show()
+    }
+
+    private fun refreshLuxuryLabels() {
+        binding.blurStrengthBtn.text = getString(
+            when (LuxuryPrefs.blurStrength(this)) {
+                0 -> R.string.blur_light
+                2 -> R.string.blur_strong
+                else -> R.string.blur_medium
+            }
+        )
+        binding.gyroSensBtn.text = getString(
+            when (LuxuryPrefs.gyroSensitivity(this)) {
+                0 -> R.string.sensitivity_low
+                2 -> R.string.sensitivity_high
+                else -> R.string.sensitivity_medium
+            }
+        )
+        binding.hapticsStrengthBtn.text = getString(
+            when (LuxuryPrefs.hapticsStrength(this)) {
+                0 -> R.string.strength_light
+                2 -> R.string.strength_strong
+                else -> R.string.strength_medium
+            }
+        )
+        binding.particlesDensityBtn.text = getString(
+            when (LuxuryPrefs.particlesDensity(this)) {
+                0 -> R.string.density_few
+                2 -> R.string.density_many
+                else -> R.string.density_medium
+            }
+        )
+        binding.miniEqStyleBtn.text = getString(
+            WaveformStyle.LABELS[WaveformStyle.current(this)]
+        )
+        binding.karaokeBtn.text = getString(
+            if (LuxuryPrefs.karaokeMode(this) == 1) R.string.karaoke_word else R.string.karaoke_line
+        )
+        binding.wrappedPeriodBtn.text = getString(
+            if (LuxuryPrefs.wrappedPeriod(this) == 1) R.string.wrapped_monthly
+            else R.string.wrapped_yearly
+        )
+        binding.themeBtn.text = getString(
+            when (LuxuryPrefs.themeMode(this)) {
+                ThemeColors.MODE_PINK -> R.string.theme_pink
+                ThemeColors.MODE_AUTO -> R.string.theme_auto
+                else -> R.string.theme_zeno
+            }
+        )
     }
 
     private fun updateLanguageSelection() {

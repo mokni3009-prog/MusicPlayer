@@ -36,6 +36,7 @@ import com.google.common.util.concurrent.Futures
 import com.google.common.util.concurrent.ListenableFuture
 import com.musicplayer.app.R
 import com.musicplayer.app.data.MusicRepository
+import com.musicplayer.app.data.PerSongAudioStore
 import com.musicplayer.app.data.PlaybackStateStore
 import com.musicplayer.app.data.PlaylistStore
 import com.musicplayer.app.data.Song
@@ -320,6 +321,7 @@ class PlaybackService : MediaLibraryService() {
             setupVisualizer(audioSessionId)
             if (audioSessionId != 0) {
                 EqManager.attach(applicationContext, audioSessionId)
+                ReverbManager.attach(applicationContext, audioSessionId)
             }
         }
 
@@ -342,6 +344,7 @@ class PlaybackService : MediaLibraryService() {
             currentTrackListenedMs = 0L
             if (song == null) return
             applyReplayGainAsync(song)
+            applyPerSongAudio(song)
             // Sleep timer (songs mode) counts finished tracks; the
             // countdown happens in handleTrackFinished / onPlaybackStateChanged.
             if (Song.needsVlc(song)) {
@@ -350,6 +353,25 @@ class PlaybackService : MediaLibraryService() {
                 VlcEngine.stop()
                 vlcPlayingCurrent = false
                 player?.play()
+            }
+        }
+
+        /** Applies the song's own saved EQ + speed (or the global ones). */
+        private fun applyPerSongAudio(song: Song) {
+            try {
+                val saved = PerSongAudioStore.get(applicationContext, song.id)
+                val ctx = applicationContext
+                if (saved?.bandsDb != null) {
+                    EqManager.applyLevelsNow(ctx, saved.bandsDb, saved.bass ?: 0)
+                } else {
+                    EqManager.applyCurrent(ctx)
+                }
+                val speed = saved?.speed ?: PlaybackStateStore.loadSpeed(ctx)
+                player?.setPlaybackParameters(
+                    androidx.media3.common.PlaybackParameters(speed, 1f)
+                )
+                VlcEngine.setRate(speed)
+            } catch (e: Exception) {
             }
         }
 
@@ -498,7 +520,9 @@ class PlaybackService : MediaLibraryService() {
             plain.prepare()
             plain.play()
         }
-        session = MediaLibrarySession.Builder(this, plain, sessionCallback).build()
+        session = MediaLibrarySession.Builder(this, plain, sessionCallback)
+            .setMediaNotificationProvider(ZenoNotificationProvider(this))
+            .build()
         mainHandler.post {
             Toast.makeText(
                 applicationContext,
@@ -862,6 +886,58 @@ class PlaybackService : MediaLibraryService() {
 
     // ---- Lifecycle -----------------------------------------------------------
 
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        // Music alarm: start the chosen song, volume rising gradually.
+        if (intent?.action == com.musicplayer.app.ui.AlarmActivity.ACTION_ALARM) {
+            val songId = intent.getLongExtra(
+                com.musicplayer.app.ui.AlarmActivity.EXTRA_SONG_ID, -1L
+            )
+            if (songId >= 0) handleAlarm(songId)
+        }
+        return super.onStartCommand(intent, flags, startId)
+    }
+
+    /** Alarm: play the chosen song (library from that song on), starting
+     * silent and ramping the volume to the user's level over 30 seconds. */
+    private fun handleAlarm(songId: Long) {
+        try {
+            val library = MusicRepository.loadSongs(applicationContext)
+            val index = library.indexOfFirst { it.id == songId }
+            if (index < 0) return
+            val exo = player ?: return
+            PlayerConnection.songs = library
+            exo.setMediaItems(library.map { PlayerConnection.toMediaItem(it) }, index, 0)
+            exo.prepare()
+            exo.volume = 0f
+            VlcEngine.setVolume(0)
+            exo.play()
+            val targetVolume = VolumeBoost.playerVolume()
+            val targetPercent = PlaybackStateStore.loadVolume(applicationContext)
+            var step = 0
+            val ramp = object : Runnable {
+                override fun run() {
+                    step++
+                    val f = (step / 30f).coerceIn(0f, 1f)
+                    exo.volume = targetVolume * f
+                    VlcEngine.setVolume((targetPercent * f).toInt())
+                    if (step < 30 && exo.isPlaying) {
+                        mainHandler.postDelayed(this, 1000)
+                    } else {
+                        exo.volume = targetVolume
+                        VlcEngine.setVolume(targetPercent)
+                    }
+                }
+            }
+            mainHandler.postDelayed(ramp, 1000)
+        } catch (e: Exception) {
+            ErrorReporter.log(
+                ErrorReporter.TYPE_ERROR,
+                "Alarm start failed: ${e.message}",
+                e
+            )
+        }
+    }
+
     override fun onCreate() {
         super.onCreate()
         createNotificationChannel()
@@ -882,7 +958,9 @@ class PlaybackService : MediaLibraryService() {
             try {
                 player = ExoPlayer.Builder(this).build()
                 player?.addListener(playerListener)
-                session = MediaLibrarySession.Builder(this, player!!, sessionCallback).build()
+                session = MediaLibrarySession.Builder(this, player!!, sessionCallback)
+                    .setMediaNotificationProvider(ZenoNotificationProvider(this))
+                    .build()
             } catch (e2: Exception) {
                 ErrorReporter.log(
                     ErrorReporter.TYPE_ERROR,
@@ -958,7 +1036,9 @@ class PlaybackService : MediaLibraryService() {
             )
             .build()
         player?.addListener(playerListener)
-        session = MediaLibrarySession.Builder(this, player!!, sessionCallback).build()
+        session = MediaLibrarySession.Builder(this, player!!, sessionCallback)
+            .setMediaNotificationProvider(ZenoNotificationProvider(this))
+            .build()
     }
 
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaLibrarySession? {

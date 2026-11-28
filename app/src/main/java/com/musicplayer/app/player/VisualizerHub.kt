@@ -17,22 +17,55 @@ object VisualizerHub {
 
     var listener: ((FloatArray) -> Unit)? = null
 
+    /** Extra listeners (e.g. the mini-player equalizer) — the single
+     * [listener] above stays for the full player. */
+    private val extraListeners = mutableSetOf<(FloatArray) -> Unit>()
+
+    fun addListener(l: (FloatArray) -> Unit) {
+        extraListeners.add(l)
+    }
+
+    fun removeListener(l: (FloatArray) -> Unit) {
+        extraListeners.remove(l)
+    }
+
+    private fun emit(magnitudes: FloatArray) {
+        listener?.invoke(magnitudes)
+        for (l in extraListeners.toList()) {
+            try {
+                l(magnitudes)
+            } catch (e: Exception) {
+            }
+        }
+    }
+
     private var lastProcessorPublishMs = 0L
+    private var lastSystemPublishMs = 0L
 
     fun publishProcessor(magnitudes: FloatArray) {
         lastProcessorPublishMs = SystemClock.uptimeMillis()
-        listener?.invoke(magnitudes)
+        emit(magnitudes)
     }
 
     fun publishSystem(fft: ByteArray) {
         // Backup only: if the processor is alive, its data wins.
         if (SystemClock.uptimeMillis() - lastProcessorPublishMs < 300) return
-        listener?.invoke(fftToMagnitudes(fft))
+        lastSystemPublishMs = SystemClock.uptimeMillis()
+        emit(fftToMagnitudes(fft))
     }
 
     fun publishSilence() {
-        listener?.invoke(FloatArray(BAR_COUNT))
+        emit(FloatArray(BAR_COUNT))
     }
+
+    /** True when the spectrum data arriving right now comes from the
+     * REAL audio (SpectrumAudioProcessor FFT on Media3 tracks, or the
+     * system Visualizer FFT) — false when the views are only
+     * simulating (e.g. VLC tracks, or nothing playing). Used by the
+     * self-test to report the waves mode honestly. */
+    fun isRealDataFresh(): Boolean =
+        SystemClock.uptimeMillis() -
+            maxOf(lastProcessorPublishMs, lastSystemPublishMs) < 600
 
     private fun fftToMagnitudes(fft: ByteArray): FloatArray {
         val binCount = fft.size / 2

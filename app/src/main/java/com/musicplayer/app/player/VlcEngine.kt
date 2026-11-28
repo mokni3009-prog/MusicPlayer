@@ -161,6 +161,10 @@ object VlcEngine {
                     try {
                         val lib = libVlc ?: return@post
                         val media = Media(lib, file.absolutePath)
+                        // Mono mode (VLC has no per-channel balance): the
+                        // stereo-mode option mixes both channels together.
+                        // It applies from the next VLC track on.
+                        if (VolumeBoost.mono) media.addOption(":stereo-mode=mono")
                         player.media = media
                         media.release()
                         player.play()

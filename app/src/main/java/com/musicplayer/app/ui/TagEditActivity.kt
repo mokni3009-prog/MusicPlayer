@@ -30,9 +30,13 @@ class TagEditActivity : FullScreenActivity() {
         const val EXTRA_SONG_IDS = "song_ids"
 
         fun start(context: Context, songIds: List<Long>) {
+            context.startActivity(intent(context, songIds))
+        }
+
+        fun intent(context: Context, songIds: List<Long>): Intent {
             val intent = Intent(context, TagEditActivity::class.java)
             intent.putExtra(EXTRA_SONG_IDS, songIds.toLongArray())
-            context.startActivity(intent)
+            return intent
         }
     }
 

@@ -6,6 +6,7 @@ import androidx.media3.common.MediaMetadata
 import androidx.media3.common.PlaybackParameters
 import androidx.media3.common.Player
 import androidx.media3.session.MediaController
+import com.musicplayer.app.data.PerSongAudioStore
 import com.musicplayer.app.data.PlaybackStateStore
 import com.musicplayer.app.data.Song
 
@@ -246,7 +247,11 @@ object PlayerConnection {
     fun setSpeed(speed: Float, context: Context? = null) {
         controller?.setPlaybackParameters(PlaybackParameters(speed))
         VlcEngine.setRate(speed)
-        context?.let { PlaybackStateStore.saveSpeed(it, speed) }
+        context?.let {
+            PlaybackStateStore.saveSpeed(it, speed)
+            // Every song remembers its own speed.
+            currentSong()?.let { song -> PerSongAudioStore.saveSpeed(it, song.id, speed) }
+        }
     }
 
     fun toggleShuffle(): Boolean {

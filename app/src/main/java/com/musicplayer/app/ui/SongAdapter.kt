@@ -56,6 +56,15 @@ class SongAdapter(
         b.root.setBackgroundResource(
             if (isCurrent) R.drawable.bg_card_current else R.drawable.bg_card_focus
         )
+        // Gold ripple on tap when the RIPPLE motion style is selected.
+        b.root.foreground =
+            if (MotionStyle.effective(holder.itemView.context) == MotionStyle.RIPPLE) {
+                androidx.core.content.ContextCompat.getDrawable(
+                    holder.itemView.context, R.drawable.ripple_gold
+                )
+            } else {
+                null
+            }
         b.songTitle.setTextColor(
             holder.itemView.context.getColor(
                 if (isCurrent) R.color.zeno_gold else R.color.zeno_ink

@@ -1,10 +1,23 @@
 package com.musicplayer.app.ui
 
+import android.animation.Animator
+import android.animation.AnimatorListenerAdapter
 import android.animation.ObjectAnimator
 import android.content.ComponentName
+import android.graphics.RenderEffect
+import android.graphics.Shader
+import android.hardware.Sensor
+import android.hardware.SensorEvent
+import android.hardware.SensorEventListener
+import android.hardware.SensorManager
+import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.text.Editable
+import android.text.TextWatcher
+import android.view.GestureDetector
+import android.view.MotionEvent
 import android.view.View
 import android.view.animation.LinearInterpolator
 import android.widget.EditText
@@ -58,6 +71,13 @@ class PlayerActivity : FullScreenActivity() {
     private var hasRealCover = false
     /** Beat-pulse level (0..1): fast attack on the bass hit, slow release. */
     private var pulseLevel = 0f
+    /** Gyroscope tilt: the disc leans with the phone (luxury option). */
+    private var sensorManager: SensorManager? = null
+    private var gyroListener: SensorEventListener? = null
+    private var tiltX = 0f
+    private var tiltY = 0f
+    private var lastBeatHapticMs = 0L
+    private var kenBurnsAnimator: ObjectAnimator? = null
 
     private val pulseRunnable = object : Runnable {
         override fun run() {
@@ -132,6 +152,7 @@ class PlayerActivity : FullScreenActivity() {
         lyricsAdapter = LyricsAdapter(emptyList()) { line ->
             PlayerConnection.seekTo(line.timeMs)
         }
+        lyricsAdapter.karaokeWordMode = LuxuryPrefs.karaokeMode(this) == 1
         binding.lyricsRecycler.layoutManager = LinearLayoutManager(this)
         binding.lyricsRecycler.adapter = lyricsAdapter
 
@@ -167,15 +188,18 @@ class PlayerActivity : FullScreenActivity() {
             AddToPlaylistDialog.show(this, song)
         }
         binding.eqButton.setOnClickListener {
-            EqActivity.start(this)
+            Haptics.tap(it, this)
+            TransitionHelper.startActivity(this, EqActivity.intent(this))
         }
         binding.ringtoneButton.setOnClickListener {
             val song = PlayerConnection.currentSong() ?: return@setOnClickListener
-            RingtoneActivity.start(this, song.id)
+            Haptics.tap(it, this)
+            TransitionHelper.startActivity(this, RingtoneActivity.intent(this, song.id))
         }
         binding.tagsButton.setOnClickListener {
             val song = PlayerConnection.currentSong() ?: return@setOnClickListener
-            TagEditActivity.start(this, listOf(song.id))
+            Haptics.tap(it, this)
+            TransitionHelper.startActivity(this, TagEditActivity.intent(this, listOf(song.id)))
         }
         binding.speedButton.setOnClickListener { cycleSpeed() }
         binding.sleepButton.setOnClickListener { showSleepDialog() }
@@ -199,6 +223,81 @@ class PlayerActivity : FullScreenActivity() {
         binding.saveQueueButton.setOnClickListener { showSaveQueueDialog() }
         binding.queuesButton.setOnClickListener { showQueuesDialog() }
         binding.lyricsSearchOnline.setOnClickListener { loadLyricsForCurrent(forceOnline = true) }
+
+        // Shared-element entry: the cover flew in from the mini player.
+        if (intent.getBooleanExtra(TransitionHelper.EXTRA_SHARED_USED, false)) {
+            window.sharedElementEnterTransition = TransitionHelper.sharedTransition()
+            window.sharedElementReturnTransition = TransitionHelper.sharedTransition()
+        }
+
+        // Swipe left/right on the disc to change the song + double-tap to like.
+        val gestures = GestureDetector(this, object : GestureDetector.SimpleOnGestureListener() {
+            override fun onFling(
+                e1: MotionEvent?, e2: MotionEvent, velocityX: Float, velocityY: Float
+            ): Boolean {
+                val start = e1 ?: return false
+                val dx = e2.x - start.x
+                val dy = e2.y - start.y
+                if (kotlin.math.abs(dx) > 120 && kotlin.math.abs(dx) > kotlin.math.abs(dy)) {
+                    if (dx < 0) PlayerConnection.next() else PlayerConnection.previous()
+                    return true
+                }
+                return false
+            }
+
+            override fun onDoubleTap(e: MotionEvent): Boolean {
+                if (!LuxuryPrefs.doubleTapLikeEnabled(this@PlayerActivity)) return false
+                val song = PlayerConnection.currentSong() ?: return false
+                if (FavoritesStore.isFavorite(this@PlayerActivity, song.id)) {
+                    FavoritesStore.removeFavorite(this@PlayerActivity, song.id)
+                } else {
+                    FavoritesStore.addFavorite(this@PlayerActivity, song.id)
+                    showFlyingHeart()
+                }
+                updateFavButton()
+                return true
+            }
+        })
+        binding.discContainer.setOnTouchListener { _, event ->
+            gestures.onTouchEvent(event)
+            true
+        }
+
+        // Lyrics search: filter lines, jump to the next match.
+        binding.lyricsSearch.addTextChangedListener(object : TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
+            override fun afterTextChanged(s: Editable?) {
+                val q = s?.toString() ?: ""
+                lyricsAdapter.setQuery(q)
+                val match = lyricsAdapter.firstMatch()
+                if (match >= 0) {
+                    binding.lyricsRecycler.scrollToPosition(match)
+                }
+            }
+        })
+        binding.lyricsNextMatch.setOnClickListener {
+            val next = lyricsAdapter.nextMatch(lyricsAdapter.activeIndex)
+            if (next >= 0) {
+                binding.lyricsRecycler.scrollToPosition(next)
+            }
+        }
+
+        // Luxury: golden particles around the disc.
+        val motionStyle = MotionStyle.effective(this)
+        if (LuxuryPrefs.particlesEnabled(this) || motionStyle == MotionStyle.PARTICLES) {
+            binding.particlesView.visibility = View.VISIBLE
+            binding.particlesView.setDensity(LuxuryPrefs.particlesDensity(this))
+        }
+        // Motion: slow Ken Burns zoom on the disc.
+        if (motionStyle == MotionStyle.KEN_BURNS) {
+            TransitionHelper.applyKenBurns(binding.discCard)
+        }
+        // Theme colours: smoke ring + disc stroke follow the theme.
+        val (accent, secondary) = ThemeColors.current(this)
+        binding.smokeView.setColors(accent, secondary)
+        binding.smokeView.setMode(WaveformStyle.current(this))
+        binding.discCard.strokeColor = accent
 
         binding.seekBar.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
@@ -225,11 +324,19 @@ class PlayerActivity : FullScreenActivity() {
         super.onStart()
         connectController()
         VisualizerHub.listener = { magnitudes -> binding.smokeView.updateMagnitudes(magnitudes) }
+        // Waveform shape (Settings): applies immediately when the player opens.
+        binding.smokeView.setMode(WaveformStyle.current(this))
         handler.post(updateRunnable)
         handler.post(pulseRunnable)
         updateSleepButton()
         updateAbStatus()
         updatePlayOnceButton()
+        // Golden particles keep drifting while the player is open.
+        if (binding.particlesView.visibility == View.VISIBLE) {
+            binding.particlesView.setRunning(true)
+        }
+        // Gyroscope tilt (luxury option).
+        startGyro()
     }
 
     override fun onStop() {
@@ -238,10 +345,14 @@ class PlayerActivity : FullScreenActivity() {
         PlayerConnection.controller?.removeListener(playerListener)
         handler.removeCallbacks(updateRunnable)
         handler.removeCallbacks(pulseRunnable)
+        binding.particlesView.setRunning(false)
+        stopGyro()
         // Back to the resting size when leaving the player.
         pulseLevel = 0f
         binding.discCard.scaleX = 1f
         binding.discCard.scaleY = 1f
+        binding.discCard.rotationX = 0f
+        binding.discCard.rotationY = 0f
     }
 
     override fun onDestroy() {
@@ -311,6 +422,14 @@ class PlayerActivity : FullScreenActivity() {
                             binding.discArt.setPadding(0, 0, 0, 0)
                             binding.discArt.scaleType = android.widget.ImageView.ScaleType.CENTER_CROP
                             binding.discArt.setImageBitmap(bitmap)
+                            // Cover colours: smoke ring, disc stroke, theme.
+                            val palette = CoverColors.extract(bitmap)
+                            ThemeColors.setCoverPalette(palette)
+                            val (accent, secondary) = ThemeColors.current(this@PlayerActivity)
+                            binding.smokeView.setColors(accent, secondary)
+                            binding.discCard.strokeColor = accent
+                            // Blurred cover background (luxury option).
+                            applyBlurBackground(bitmap)
                         } else {
                             showLogoFallback()
                         }
@@ -331,7 +450,100 @@ class PlayerActivity : FullScreenActivity() {
         binding.discArt.setPadding(pad, pad, pad, pad)
         binding.discArt.scaleType = android.widget.ImageView.ScaleType.FIT_CENTER
         binding.discArt.setImageResource(R.drawable.zeno_logo_transparent)
+        // No cover: back to the default palette, no blurred background.
+        ThemeColors.setCoverPalette(CoverColors.DEFAULT)
+        val (accent, secondary) = ThemeColors.current(this)
+        binding.smokeView.setColors(accent, secondary)
+        binding.discCard.strokeColor = accent
+        binding.playerBg.visibility = View.GONE
+        binding.playerBgDim.visibility = View.GONE
         updateDiscRotation()
+    }
+
+    /** Blurred cover background behind the player (luxury option). */
+    private fun applyBlurBackground(bitmap: android.graphics.Bitmap) {
+        if (!LuxuryPrefs.blurEnabled(this)) {
+            binding.playerBg.visibility = View.GONE
+            binding.playerBgDim.visibility = View.GONE
+            return
+        }
+        binding.playerBg.setImageBitmap(bitmap)
+        val radius = when (LuxuryPrefs.blurStrength(this)) {
+            0 -> 10f
+            2 -> 28f
+            else -> 18f
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            try {
+                binding.playerBg.setRenderEffect(
+                    RenderEffect.createBlurEffect(radius, radius, Shader.TileMode.CLAMP)
+                )
+            } catch (e: Exception) {
+            }
+        }
+        binding.playerBg.visibility = View.VISIBLE
+        binding.playerBgDim.visibility = View.VISIBLE
+    }
+
+    /** Gyroscope: the disc leans with the phone (luxury option). */
+    private fun startGyro() {
+        stopGyro()
+        if (!LuxuryPrefs.gyroEnabled(this)) return
+        val manager = getSystemService(android.content.Context.SENSOR_SERVICE) as? SensorManager
+            ?: return
+        val sensor = manager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER) ?: return
+        sensorManager = manager
+        val factor = when (LuxuryPrefs.gyroSensitivity(this)) {
+            0 -> 4f
+            2 -> 12f
+            else -> 8f
+        }
+        gyroListener = object : SensorEventListener {
+            override fun onSensorChanged(event: SensorEvent) {
+                // Tilt from gravity: x = roll, y = pitch.
+                val tx = (-event.values[0] / 9.81f * factor).coerceIn(-factor, factor)
+                val ty = (event.values[1] / 9.81f * factor).coerceIn(-factor, factor)
+                tiltX += (tx - tiltX) * 0.15f
+                tiltY += (ty - tiltY) * 0.15f
+                binding.discCard.rotationY = tiltX
+                binding.discCard.rotationX = -tiltY
+            }
+
+            override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {}
+        }
+        manager.registerListener(gyroListener, sensor, SensorManager.SENSOR_DELAY_GAME)
+    }
+
+    private fun stopGyro() {
+        try {
+            gyroListener?.let { sensorManager?.unregisterListener(it) }
+        } catch (e: Exception) {
+        }
+        gyroListener = null
+        sensorManager = null
+        tiltX = 0f
+        tiltY = 0f
+    }
+
+    /** Flying heart for double-tap to like (luxury option). */
+    private fun showFlyingHeart() {
+        val heart = binding.flyingHeart
+        heart.visibility = View.VISIBLE
+        heart.alpha = 1f
+        heart.scaleX = 0.5f
+        heart.scaleY = 0.5f
+        heart.translationY = 0f
+        heart.animate()
+            .scaleX(1.2f).scaleY(1.2f)
+            .translationY(-(90 * resources.displayMetrics.density))
+            .alpha(0f)
+            .setDuration(800)
+            .setListener(object : AnimatorListenerAdapter() {
+                override fun onAnimationEnd(animation: Animator) {
+                    heart.visibility = View.GONE
+                }
+            })
+            .start()
     }
 
     private fun updateProgress() {
@@ -456,6 +668,14 @@ class PlayerActivity : FullScreenActivity() {
         val scale = 1f + pulseLevel * 0.035f
         binding.discCard.scaleX = scale
         binding.discCard.scaleY = scale
+        // Haptic beat (luxury option): a light vibration on strong bass hits.
+        if (bass > 0.55f) {
+            val now = android.os.SystemClock.uptimeMillis()
+            if (now - lastBeatHapticMs > 300) {
+                lastBeatHapticMs = now
+                Haptics.beat(this)
+            }
+        }
     }
 
     // ---- Volume 0-200% ----
@@ -557,6 +777,9 @@ class PlayerActivity : FullScreenActivity() {
         val song = PlayerConnection.currentSong() ?: return
         if (song.id == currentLyricsSongId && !forceOnline) return
         currentLyricsSongId = song.id
+        binding.lyricsSearch.setText("")
+        lyricsAdapter.setQuery("")
+        binding.lyricsSearchRow.visibility = View.GONE
         lifecycleScope.launch {
             binding.lyricsStatus.text = getString(R.string.lyrics_loading)
             binding.lyricsRecycler.visibility = View.GONE
@@ -588,6 +811,7 @@ class PlayerActivity : FullScreenActivity() {
                 binding.lyricsStatus.visibility = View.GONE
                 binding.lyricsRecycler.visibility = View.VISIBLE
                 lyricsAdapter.submitList(result.lines)
+                binding.lyricsSearchRow.visibility = View.VISIBLE
                 binding.lyricsSearchOnline.visibility = View.GONE
             } else if (!result.plainText.isNullOrBlank()) {
                 // Embedded plain lyrics (no timestamps): show as text.
@@ -613,7 +837,22 @@ class PlayerActivity : FullScreenActivity() {
         for (i in currentLyrics.indices) {
             if (currentLyrics[i].timeMs <= pos) index = i else break
         }
-        if (index >= 0) lyricsAdapter.setActive(index)
+        if (index >= 0) {
+            // Karaoke word-by-word: how far through the current line we are.
+            var wordProgress = 0f
+            if (LuxuryPrefs.karaokeMode(this) == 1) {
+                val start = currentLyrics[index].timeMs
+                val end = if (index + 1 < currentLyrics.size) {
+                    currentLyrics[index + 1].timeMs
+                } else {
+                    start + 4000
+                }
+                if (end > start) {
+                    wordProgress = ((pos - start).toFloat() / (end - start)).coerceIn(0f, 1f)
+                }
+            }
+            lyricsAdapter.setActive(index, wordProgress)
+        }
     }
 
     // ---- Queues ----

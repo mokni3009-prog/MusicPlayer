@@ -20,8 +20,10 @@ class StatsActivity : FullScreenActivity() {
 
     companion object {
         fun start(context: Context) {
-            context.startActivity(Intent(context, StatsActivity::class.java))
+            context.startActivity(intent(context))
         }
+
+        fun intent(context: Context) = Intent(context, StatsActivity::class.java)
     }
 
     private lateinit var binding: ActivityStatsBinding
