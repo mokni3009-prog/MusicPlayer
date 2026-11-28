@@ -6,6 +6,7 @@ import androidx.media3.common.MediaMetadata
 import androidx.media3.common.PlaybackParameters
 import androidx.media3.common.Player
 import androidx.media3.session.MediaController
+import com.musicplayer.app.data.NotificationDismissStore
 import com.musicplayer.app.data.PerSongAudioStore
 import com.musicplayer.app.data.PlaybackStateStore
 import com.musicplayer.app.data.Song
@@ -23,6 +24,27 @@ import java.util.Collections
  * service's ticker enforces them.
  */
 object PlayerConnection {
+
+    // v1.0.16 (zombie notification): application context, set by the
+    // service (and the library activity) at startup, so the play entry
+    // points below can clear the X-dismissal flag synchronously — before
+    // the player fires its first event. Application context only: no
+    // activity is ever held here.
+    private var appContext: Context? = null
+
+    fun setAppContext(context: Context) {
+        appContext = context.applicationContext
+    }
+
+    /** Clears the X-dismissal flag: playback genuinely starts again. */
+    private fun clearNotificationDismissed() {
+        try {
+            appContext?.let {
+                NotificationDismissStore.setDismissed(it, false)
+            }
+        } catch (e: Exception) {
+        }
+    }
 
     var controller: MediaController? = null
         set(value) {
@@ -172,6 +194,10 @@ object PlayerConnection {
         val safeIndex = index.coerceIn(0, songs.size - 1)
         this.songs = songs
         clearAB()
+        // v1.0.16 (zombie notification): playback starts — the X
+        // dismissal is over. Clear BEFORE touching the controller so
+        // the first notification update already sees it.
+        clearNotificationDismissed()
         c.setMediaItems(songs.map { toMediaItem(it) }, safeIndex, 0)
         c.prepare()
         c.play()
@@ -207,7 +233,12 @@ object PlayerConnection {
             return
         }
         val c = controller ?: return
-        if (c.isPlaying) c.pause() else c.play()
+        if (c.isPlaying) c.pause() else {
+            // v1.0.16 (zombie notification): turning playback ON ends
+            // the X dismissal.
+            clearNotificationDismissed()
+            c.play()
+        }
     }
 
     fun pause() {
@@ -224,6 +255,9 @@ object PlayerConnection {
             return
         }
         val c = controller ?: return
+        // v1.0.16 (zombie notification): playback starts — the X
+        // dismissal is over.
+        clearNotificationDismissed()
         if (c.mediaItemCount == 0 && songs.isNotEmpty()) {
             // The queue was cleared by a notification close: restore it
             // at the remembered song (the saved queue in

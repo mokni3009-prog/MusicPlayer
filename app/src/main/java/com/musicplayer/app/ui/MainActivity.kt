@@ -348,6 +348,10 @@ class MainActivity : FullScreenActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // v1.0.16 (zombie notification): PlayerConnection needs an
+        // application context to clear the X-dismissal flag when the
+        // user starts playback again (the service sets it too).
+        PlayerConnection.setAppContext(applicationContext)
         // Required glue for the MaterialContainerTransform shared-element
         // transition (v1.0.6 fix): without this callback the library never
         // tags the snapshot views, and the container transform crashes the
@@ -481,6 +485,14 @@ class MainActivity : FullScreenActivity() {
         PlayerConnection.controller?.removeListener(playerListener)
         controllerFuture?.let { MediaController.releaseFuture(it) }
         controllerFuture = null
+        // v1.0.16 (zombie notification): releasing the future unbinds
+        // the controller, but the static field used to keep pointing at
+        // the dead controller — the widget receiver then took the
+        // "controller exists" branch and drove a dead controller, so
+        // its buttons silently did nothing. Drop the reference when
+        // this activity is really going away (not on a config change,
+        // where the new instance reconnects).
+        if (isFinishing) PlayerConnection.controller = null
         super.onDestroy()
     }
 

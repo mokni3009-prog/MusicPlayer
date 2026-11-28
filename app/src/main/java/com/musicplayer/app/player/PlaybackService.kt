@@ -1,5 +1,6 @@
 package com.musicplayer.app.player
 
+import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
@@ -16,6 +17,7 @@ import android.os.Handler
 import android.os.Looper
 import android.widget.Toast
 import androidx.core.app.NotificationCompat
+import androidx.core.app.NotificationManagerCompat
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
 import androidx.media3.common.PlaybackException
@@ -31,6 +33,7 @@ import androidx.media3.session.LibraryResult
 import androidx.media3.session.MediaLibraryService
 import androidx.media3.session.MediaLibraryService.LibraryParams
 import androidx.media3.session.MediaLibraryService.MediaLibrarySession
+import androidx.media3.session.MediaNotification
 import androidx.media3.session.MediaSession
 import androidx.media3.session.SessionError
 import androidx.media3.session.SessionResult
@@ -39,6 +42,7 @@ import com.google.common.util.concurrent.Futures
 import com.google.common.util.concurrent.ListenableFuture
 import com.musicplayer.app.R
 import com.musicplayer.app.data.MusicRepository
+import com.musicplayer.app.data.NotificationDismissStore
 import com.musicplayer.app.data.PerSongAudioStore
 import com.musicplayer.app.data.PlaybackStateStore
 import com.musicplayer.app.data.PlaylistStore
@@ -155,6 +159,12 @@ class PlaybackService : MediaLibraryService() {
     /** Fallback alarm tone (C3) — the system default alarm sound, used
      * when the alarm's song is gone from the library. Stopped by stopAlarm. */
     private var alarmFallbackRingtone: android.media.Ringtone? = null
+
+    // v1.0.16 (zombie notification): true while an alarm is ringing
+    // (song or fallback tone). onTaskRemoved must NOT stop the service
+    // while the alarm is sounding, even though the player may be paused
+    // (fallback-tone path has no player playback at all).
+    private var alarmRinging = false
 
     private val noisyReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
@@ -280,6 +290,12 @@ class PlaybackService : MediaLibraryService() {
     private val vlcListener = object : VlcEngine.Listener {
         override fun onVlcStarted(song: Song) {
             vlcPlayingCurrent = true
+            // v1.0.16 (zombie notification): VLC playback started — the X
+            // dismissal is over (same backstop as onIsPlayingChanged for
+            // the Media3 engine).
+            if (NotificationDismissStore.isDismissed(applicationContext)) {
+                NotificationDismissStore.setDismissed(applicationContext, false)
+            }
             // v1.0.9: re-apply the EQ now that VLC has a live input — an
             // equalizer set before the media starts can be dropped.
             VlcEngine.applyEqualizer(
@@ -391,8 +407,34 @@ class PlaybackService : MediaLibraryService() {
     }
 
     /** Nudges the notification to refresh (e.g. after a VLC state change). */
+    // ---- Zombie-notification helpers (v1.0.16) -------------------------
+    // See NotificationDismissStore for the full root-cause analysis.
+
+    /** True while music is actually sounding (Media3 or VLC engine). */
+    private fun isPlayingNow(): Boolean =
+        (player?.isPlaying == true) || VlcEngine.active
+
+    /** Removes the media notification from the shade, unconditionally. */
+    private fun cancelMediaNotification() {
+        try {
+            NotificationManagerCompat.from(applicationContext)
+                .cancel(MediaNotification.DEFAULT_NOTIFICATION_ID)
+        } catch (e: Exception) {
+        }
+    }
+
     private fun nudgeNotification() {
         try {
+            // v1.0.16 (zombie notification): this re-posts directly with
+            // manager.notify(), bypassing the manager's
+            // shouldShowNotification gate — so it must respect the X
+            // dismissal too. Never re-post while the user dismissed the
+            // notification and nothing is playing.
+            if (NotificationDismissStore.isDismissed(applicationContext) &&
+                !isPlayingNow()
+            ) {
+                return
+            }
             // v1.0.16 (m20): the old code sought to the current position
             // to force a refresh — a no-op seek that could glitch
             // playback. Re-post the notification directly instead.
@@ -419,6 +461,21 @@ class PlaybackService : MediaLibraryService() {
         override fun onIsPlayingChanged(isPlaying: Boolean) {
             if (!isPlaying) {
                 VisualizerHub.publishSilence()
+            } else {
+                // v1.0.16 (zombie notification): playback genuinely
+                // started again — the X dismissal is over, so the
+                // notification may show again. This backstop covers every
+                // play path (UI, widget, Android Auto, Assistant), even
+                // one that missed the synchronous clear in
+                // PlayerConnection. Re-run the notification update right
+                // away: the update that fired when play was pressed may
+                // have run while the flag was still set (listener order),
+                // and without this the notification would stay hidden
+                // even though music is playing.
+                if (NotificationDismissStore.isDismissed(applicationContext)) {
+                    NotificationDismissStore.setDismissed(applicationContext, false)
+                    session?.let { onUpdateNotification(it, true) }
+                }
             }
             com.musicplayer.app.widget.ZenoWidgetProvider.updateAll(applicationContext)
         }
@@ -1052,6 +1109,14 @@ class PlaybackService : MediaLibraryService() {
         }
         // Alarm stop (from the alarm notification or the ringing screen).
         if (intent?.action == AlarmStore.ACTION_STOP_ALARM) {
+            // v1.0.16 (alarm crash fix): the ringing screen starts the
+            // service with startForegroundService() to deliver the stop —
+            // and when the service was already dead, that start carries
+            // the same ~5 s startForeground() deadline as the alarm
+            // itself. Promote to foreground FIRST, then stop.
+            startForegroundForAlarm(
+                "", getString(R.string.alarm_default_name), ""
+            )
             stopAlarm()
             return super.onStartCommand(intent, flags, startId)
         }
@@ -1064,7 +1129,30 @@ class PlaybackService : MediaLibraryService() {
                 ?: getString(R.string.alarm_default_name)
             val songTitle = intent.getStringExtra(AlarmStore.EXTRA_SONG_TITLE) ?: ""
             val fadeIn = intent.getBooleanExtra(AlarmStore.EXTRA_FADE_IN, true)
-            if (songId >= 0) handleAlarm(songId, alarmId, alarmName, songTitle, fadeIn)
+            // v1.0.16 (alarm crash fix): startForeground() FIRST, before
+            // any slow work. The old code only posted the alarm
+            // notification with manager.notify() AFTER a MediaStore scan
+            // (loadSongs) and relied on MediaSessionService to promote
+            // itself once playback started — on a cold start that easily
+            // takes longer than Android's ~5 s deadline after
+            // startForegroundService(), so the system killed the service
+            // with RemoteServiceException, the app crashed and the alarm
+            // stopped after a few seconds of music (v1.0.15, reported
+            // 2026-11-28 18:34, confirmed by the server crash report).
+            // The alarm notification is built from the intent extras
+            // only — no I/O, no player, no waiting.
+            startForegroundForAlarm(alarmId, alarmName, songTitle)
+            if (songId >= 0) {
+                handleAlarm(songId, alarmId, alarmName, songTitle, fadeIn)
+            } else {
+                // No song to play — never leave a stuck foreground
+                // notification behind.
+                ErrorReporter.log(
+                    ErrorReporter.TYPE_ERROR,
+                    "Alarm fired with no song id (alarm=$alarmId)"
+                )
+                stopAlarm()
+            }
         }
         return super.onStartCommand(intent, flags, startId)
     }
@@ -1093,6 +1181,18 @@ class PlaybackService : MediaLibraryService() {
      *   updater and the error reporter run outside this service.
      */
     private fun closeFromNotification() {
+        // v1.0.16 (zombie notification): record the dismissal FIRST, in
+        // persistent prefs, so a later service restart (START_STICKY
+        // after a crash) or a later player event can never re-post the
+        // notification until the user actually plays again. The old code
+        // only cleared the timeline + stopSelf(): on a dead service the
+        // X PendingIntent starts a fresh service whose timeline is
+        // already empty, so clearMediaItems() fires no event, the
+        // manager never re-evaluates, and the stale notification was
+        // never cancelled — X looked dead and the notification kept
+        // coming back. Cancel it explicitly here, and drop the
+        // foreground status too.
+        NotificationDismissStore.setDismissed(applicationContext, true)
         try {
             VlcEngine.stop()
         } catch (e: Exception) {
@@ -1106,6 +1206,11 @@ class PlaybackService : MediaLibraryService() {
             PlayerConnection.lastQueueIndex =
                 player?.currentMediaItemIndex?.coerceAtLeast(0) ?: 0
             player?.clearMediaItems()
+        } catch (e: Exception) {
+        }
+        cancelMediaNotification()
+        try {
+            stopForeground(STOP_FOREGROUND_REMOVE)
         } catch (e: Exception) {
         }
         try {
@@ -1130,6 +1235,11 @@ class PlaybackService : MediaLibraryService() {
             }
             val exo = player
             if (exo == null || exo.mediaItemCount == 0) {
+                // v1.0.16 (zombie notification): a notification must
+                // never sit visible with dead buttons. If there is no
+                // live player/queue behind it, remove it instead of
+                // silently ignoring the press.
+                cancelMediaNotification()
                 ErrorReporter.log(
                     ErrorReporter.TYPE_ERROR,
                     "Notification play/pause ignored: no player or empty queue"
@@ -1139,6 +1249,10 @@ class PlaybackService : MediaLibraryService() {
             if (exo.isPlaying) {
                 exo.pause()
             } else {
+                // v1.0.16 (zombie notification): the user pressed play
+                // on the notification — playback genuinely starts, so
+                // the X dismissal is over.
+                NotificationDismissStore.setDismissed(applicationContext, false)
                 // After a stop the player is idle (and after the last
                 // track it is ended): play() alone does nothing then.
                 when (exo.playbackState) {
@@ -1160,6 +1274,10 @@ class PlaybackService : MediaLibraryService() {
         try {
             val exo = player
             if (exo == null) {
+                // v1.0.16 (zombie notification): no live player behind
+                // this notification — remove it instead of leaving a
+                // notification with dead buttons.
+                cancelMediaNotification()
                 ErrorReporter.log(
                     ErrorReporter.TYPE_ERROR,
                     "Notification next ignored: no player"
@@ -1180,6 +1298,10 @@ class PlaybackService : MediaLibraryService() {
                 return
             }
             if (exo.mediaItemCount == 0) {
+                // v1.0.16 (zombie notification): no live queue behind
+                // this notification — remove it instead of leaving a
+                // notification with dead buttons.
+                cancelMediaNotification()
                 ErrorReporter.log(
                     ErrorReporter.TYPE_ERROR,
                     "Notification next ignored: empty queue"
@@ -1200,6 +1322,10 @@ class PlaybackService : MediaLibraryService() {
         try {
             val exo = player
             if (exo == null) {
+                // v1.0.16 (zombie notification): no live player behind
+                // this notification — remove it instead of leaving a
+                // notification with dead buttons.
+                cancelMediaNotification()
                 ErrorReporter.log(
                     ErrorReporter.TYPE_ERROR,
                     "Notification previous ignored: no player"
@@ -1224,6 +1350,10 @@ class PlaybackService : MediaLibraryService() {
                 return
             }
             if (exo.mediaItemCount == 0) {
+                // v1.0.16 (zombie notification): no live queue behind
+                // this notification — remove it instead of leaving a
+                // notification with dead buttons.
+                cancelMediaNotification()
                 ErrorReporter.log(
                     ErrorReporter.TYPE_ERROR,
                     "Notification previous ignored: empty queue"
@@ -1251,6 +1381,11 @@ class PlaybackService : MediaLibraryService() {
         songTitle: String,
         fadeIn: Boolean
     ) {
+        // v1.0.16 (zombie notification): the alarm IS user-intended
+        // playback — the X dismissal is over, and the alarm is ringing
+        // (onTaskRemoved must not stop the service mid-ring).
+        NotificationDismissStore.setDismissed(applicationContext, false)
+        alarmRinging = true
         try {
             val library = MusicRepository.loadSongs(applicationContext)
             val index = library.indexOfFirst { it.id == songId }
@@ -1264,34 +1399,23 @@ class PlaybackService : MediaLibraryService() {
                     ErrorReporter.TYPE_ERROR,
                     "Alarm song not found in library (id=$songId) — fallback tone"
                 )
-                postAlarmNotification(
-                    alarmId, alarmName,
-                    getString(R.string.alarm_song_missing, songTitle)
-                )
-                try {
-                    val toneUri = android.media.RingtoneManager.getDefaultUri(
-                        android.media.RingtoneManager.TYPE_ALARM
-                    ) ?: android.media.RingtoneManager.getDefaultUri(
-                        android.media.RingtoneManager.TYPE_NOTIFICATION
-                    )
-                    val tone = toneUri?.let {
-                        android.media.RingtoneManager.getRingtone(applicationContext, it)
-                    }
-                    tone?.let {
-                        alarmFallbackRingtone = it
-                        it.play()
-                    }
-                } catch (e: Exception) {
-                    ErrorReporter.log(
-                        ErrorReporter.TYPE_ERROR,
-                        "Alarm fallback tone failed: ${e.message}",
-                        e
-                    )
-                }
+                ringFallbackTone(alarmId, alarmName, songTitle)
                 return
             }
             postAlarmNotification(alarmId, alarmName, songTitle)
-            val exo = player ?: return
+            // v1.0.16 (alarm crash fix): the player can be null when its
+            // build failed in onCreate — the old code returned here,
+            // leaving the foreground notification up with no sound at
+            // all. Ring the default tone instead (same as a missing song).
+            val exo = player
+            if (exo == null) {
+                ErrorReporter.log(
+                    ErrorReporter.TYPE_ERROR,
+                    "Alarm: no player built — fallback tone"
+                )
+                ringFallbackTone(alarmId, alarmName, songTitle)
+                return
+            }
             PlayerConnection.songs = library
             exo.setMediaItems(library.map { PlayerConnection.toMediaItem(it) }, index, 0)
             exo.prepare()
@@ -1356,11 +1480,50 @@ class PlaybackService : MediaLibraryService() {
         }
     }
 
-    /** The alarm notification: high priority, full-screen ringing screen,
-     * and a clear Stop action. Posted when the alarm fires, even if the
-     * app was closed. */
-    private fun postAlarmNotification(alarmId: String, alarmName: String, songTitle: String) {
+    /**
+     * v1.0.16 (alarm crash fix): promotes the service to foreground
+     * with the alarm notification, IMMEDIATELY — before any slow work.
+     * Android kills a service started with startForegroundService()
+     * if it does not call startForeground() within ~5 s, and the old
+     * alarm path only posted the notification (manager.notify) after
+     * a MediaStore scan, relying on MediaSessionService to promote
+     * itself once playback started. Never throws: on any failure it
+     * logs and returns, and the alarm path still tries to ring.
+     */
+    private fun startForegroundForAlarm(
+        alarmId: String,
+        alarmName: String,
+        songTitle: String
+    ) {
         try {
+            val notification = buildAlarmNotification(alarmId, alarmName, songTitle)
+                ?: NotificationCompat.Builder(this, ALARM_CHANNEL_ID)
+                    .setSmallIcon(R.drawable.ic_alarm)
+                    .setContentTitle(alarmName)
+                    .setContentText(songTitle)
+                    .setPriority(NotificationCompat.PRIORITY_HIGH)
+                    .setCategory(NotificationCompat.CATEGORY_ALARM)
+                    .setOngoing(true)
+                    .build()
+            startForeground(ALARM_NOTIFICATION_ID, notification)
+        } catch (e: Exception) {
+            ErrorReporter.log(
+                ErrorReporter.TYPE_ERROR,
+                "Alarm startForeground failed: ${e.message}",
+                e
+            )
+        }
+    }
+
+    /** Builds the alarm notification (high priority, full-screen
+     * ringing screen, Stop action). Pure construction from the given
+     * strings — no I/O — so it is safe to call before any slow work. */
+    private fun buildAlarmNotification(
+        alarmId: String,
+        alarmName: String,
+        songTitle: String
+    ): Notification? {
+        return try {
             val ringingIntent = Intent(this, AlarmRingingActivity::class.java).apply {
                 putExtra(AlarmStore.EXTRA_ALARM_ID, alarmId)
                 putExtra(AlarmStore.EXTRA_ALARM_NAME, alarmName)
@@ -1378,7 +1541,7 @@ class PlaybackService : MediaLibraryService() {
                 this, ALARM_NOTIFICATION_ID, stopIntent,
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
             )
-            val notification = NotificationCompat.Builder(this, ALARM_CHANNEL_ID)
+            NotificationCompat.Builder(this, ALARM_CHANNEL_ID)
                 .setSmallIcon(R.drawable.ic_alarm)
                 .setContentTitle(alarmName)
                 .setContentText(songTitle)
@@ -1390,6 +1553,25 @@ class PlaybackService : MediaLibraryService() {
                 .setFullScreenIntent(ringingPending, true)
                 .addAction(0, getString(R.string.alarm_stop), stopPending)
                 .build()
+        } catch (e: Exception) {
+            ErrorReporter.log(
+                ErrorReporter.TYPE_ERROR,
+                "Alarm notification build failed: ${e.message}",
+                e
+            )
+            null
+        }
+    }
+
+    /** The alarm notification: high priority, full-screen ringing screen,
+     * and a clear Stop action. Posted when the alarm fires, even if the
+     * app was closed. (The service is already foreground by then — see
+     * startForegroundForAlarm in onStartCommand; this re-posts the same
+     * notification id so the content stays current.) */
+    private fun postAlarmNotification(alarmId: String, alarmName: String, songTitle: String) {
+        try {
+            val notification = buildAlarmNotification(alarmId, alarmName, songTitle)
+                ?: return
             val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
             manager.notify(ALARM_NOTIFICATION_ID, notification)
         } catch (e: Exception) {
@@ -1401,9 +1583,43 @@ class PlaybackService : MediaLibraryService() {
         }
     }
 
+    /**
+     * v1.0.16 (C3): rings the system default alarm tone when the
+     * chosen song cannot be played — the song is gone from the library,
+     * or the player itself could not be built. The alarm must never
+     * ring silently (and never leave a stuck notification behind).
+     */
+    private fun ringFallbackTone(alarmId: String, alarmName: String, songTitle: String) {
+        postAlarmNotification(
+            alarmId, alarmName,
+            getString(R.string.alarm_song_missing, songTitle)
+        )
+        try {
+            val toneUri = android.media.RingtoneManager.getDefaultUri(
+                android.media.RingtoneManager.TYPE_ALARM
+            ) ?: android.media.RingtoneManager.getDefaultUri(
+                android.media.RingtoneManager.TYPE_NOTIFICATION
+            )
+            val tone = toneUri?.let {
+                android.media.RingtoneManager.getRingtone(applicationContext, it)
+            }
+            tone?.let {
+                alarmFallbackRingtone = it
+                it.play()
+            }
+        } catch (e: Exception) {
+            ErrorReporter.log(
+                ErrorReporter.TYPE_ERROR,
+                "Alarm fallback tone failed: ${e.message}",
+                e
+            )
+        }
+    }
+
     /** Stop a ringing alarm: halt the ramp, pause playback, remove the
      * alarm notification, tell the ringing screen to close. */
     private fun stopAlarm() {
+        alarmRinging = false
         try {
             alarmRamp?.let { mainHandler.removeCallbacks(it) }
             alarmRamp = null
@@ -1421,6 +1637,15 @@ class PlaybackService : MediaLibraryService() {
         }
         try {
             player?.pause()
+        } catch (e: Exception) {
+        }
+        // v1.0.16 (alarm crash fix): drop the foreground status the alarm
+        // start took (startForegroundForAlarm) — otherwise the service
+        // lingers as a foreground service with a stale notification.
+        // Playback is already paused above, so Media3's own media
+        // notification is gone by now; this only removes the alarm one.
+        try {
+            stopForeground(STOP_FOREGROUND_REMOVE)
         } catch (e: Exception) {
         }
         try {
@@ -1442,6 +1667,10 @@ class PlaybackService : MediaLibraryService() {
     override fun onCreate() {
         super.onCreate()
         createNotificationChannel()
+        // v1.0.16 (zombie notification): PlayerConnection needs an
+        // application context to clear the X-dismissal flag when the
+        // user starts playback again.
+        PlayerConnection.setAppContext(applicationContext)
         // Media3 1.5: the notification provider is set on the service
         // (not on the session Builder anymore) and must be set before
         // onCreate() returns; it survives session rebuilds.
@@ -1521,6 +1750,16 @@ class PlaybackService : MediaLibraryService() {
         }
         lastTickMs = System.currentTimeMillis()
         mainHandler.post(ticker)
+        // v1.0.16 (zombie notification): a freshly started service has
+        // an empty timeline and nothing playing — it must never inherit
+        // a stale notification left in the shade by a previous process
+        // (notifications survive process death; after the 18:34 alarm
+        // crash the pre-crash notification stayed visible, and Media3's
+        // manager does NOT cancel it on a restart — its
+        // onConnected(false) path does nothing). Cancel it here, on
+        // every start; the manager re-posts it as soon as the user
+        // actually plays something.
+        cancelMediaNotification()
     }
 
     /**
@@ -1588,9 +1827,55 @@ class PlaybackService : MediaLibraryService() {
         return session
     }
 
+    // ---- Zombie-notification gate (v1.0.16) --------------------------
+    // Media3 reaches its notification manager ONLY through this
+    // overridable method: the default implementation calls
+    // getMediaNotificationManager().updateNotification() only when the
+    // deprecated 1-arg onUpdateNotification ran (defaultMethodCalled).
+    // By NOT calling super while the user dismissed the notification
+    // and nothing is playing, no Media3-driven (re-)post can happen at
+    // all — this is the single gate for every manager update path
+    // (timeline change, play/pause, metadata, session add).
+    override fun onUpdateNotification(
+        session: MediaSession,
+        startInForegroundRequired: Boolean
+    ) {
+        if (NotificationDismissStore.isDismissed(applicationContext) &&
+            !isPlayingNow()
+        ) {
+            // User pressed X and has not played again: stay gone, and
+            // make sure no stale notification is left in the shade.
+            cancelMediaNotification()
+            return
+        }
+        super.onUpdateNotification(session, startInForegroundRequired)
+    }
+
+    // v1.0.16 (zombie notification): when the user swipes the app away
+    // with playback stopped, the notification must go away with it and
+    // the service must actually stop — the old code relied on
+    // MediaSessionService's default, which only stops the service when
+    // isPlaybackOngoing() is false, and never cancelled the notification
+    // itself, so a lingering service could re-post it. An active alarm
+    // keeps ringing (it is a foreground service of its own).
+    override fun onTaskRemoved(rootIntent: Intent?) {
+        if (!isPlayingNow() && !alarmRinging) {
+            cancelMediaNotification()
+            try {
+                stopSelf()
+            } catch (e: Exception) {
+            }
+        }
+        super.onTaskRemoved(rootIntent)
+    }
+
     override fun onDestroy() {
         mainHandler.removeCallbacks(ticker)
         saveResumeState()
+        // v1.0.16 (zombie notification): a dying service must never
+        // leave an orphaned notification behind — no live player/service
+        // means no notification at all.
+        cancelMediaNotification()
         try {
             unregisterReceiver(noisyReceiver)
         } catch (e: Exception) {
