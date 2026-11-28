@@ -1608,7 +1608,7 @@
                         android:ellipsize="marquee"
                         android:marqueeRepeatLimit="marquee_forever"
                         android:scrollHorizontally="true"
-                        android:selected="true"
+                       
                         android:singleLine="true"
                         android:textColor="@color/zeno_ink"
                         android:textDirection="firstStrong"

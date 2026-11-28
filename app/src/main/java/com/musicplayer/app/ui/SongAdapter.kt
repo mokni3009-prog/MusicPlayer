@@ -49,6 +49,7 @@ class SongAdapter(
         val song = songs[position]
         val b = holder.binding
         b.songTitle.text = song.title
+        b.songTitle.isSelected = true
         b.songSubtitle.text = "${song.artist} • ${song.album}"
         b.songDuration.text = formatDuration(song.durationMs)
         // Current row: highlighted background.

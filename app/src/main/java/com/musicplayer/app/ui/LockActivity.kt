@@ -112,6 +112,7 @@ class LockActivity : FullScreenActivity() {
     private fun updateSongInfo() {
         val song = PlayerConnection.currentSong()
         binding.songTitle.text = song?.title ?: getString(R.string.no_song)
+        binding.songTitle.isSelected = true
         binding.songArtist.text = song?.artist ?: getString(R.string.from_device)
         val duration = PlayerConnection.controller?.duration?.takeIf { it > 0 }
             ?: song?.durationMs ?: 0L

@@ -789,6 +789,7 @@ class MainActivity : FullScreenActivity() {
         }
         binding.miniPlayerBar.visibility = View.VISIBLE
         binding.miniTitle.text = song.title
+        binding.miniTitle.isSelected = true
         binding.miniArtist.text = song.artist
         binding.miniPlayPause.setImageResource(
             if (PlayerConnection.isPlaying()) R.drawable.ic_pause else R.drawable.ic_play

@@ -22,6 +22,7 @@ class QueueAdapter(
     override fun onBindViewHolder(holder: ViewHolder, position: Int) {
         val song = songs[position]
         holder.binding.songTitle.text = song.title
+        holder.binding.songTitle.isSelected = true
         holder.binding.songArtist.text = song.artist
         holder.binding.songDuration.text = formatDuration(song.durationMs)
         holder.binding.coverView.setBackgroundResource(SongAdapter.coverResFor(song))

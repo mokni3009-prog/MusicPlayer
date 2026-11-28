@@ -70,6 +70,7 @@ class RingtoneActivity : FullScreenActivity() {
                 return@launch
             }
             binding.songTitle.text = song.title
+            binding.songTitle.isSelected = true
             binding.songArtist.text = song.artist
             durationMs = song.durationMs
             endMs = minOf(30_000L, durationMs)

@@ -403,6 +403,7 @@ class PlayerActivity : FullScreenActivity() {
         val song = PlayerConnection.currentSong()
         val c = PlayerConnection.controller
         binding.songTitle.text = song?.title ?: getString(R.string.no_song)
+        binding.songTitle.isSelected = true
         binding.songArtist.text = song?.artist ?: getString(R.string.from_device)
         val duration = c?.duration?.takeIf { it > 0 } ?: song?.durationMs ?: 0L
         binding.seekBar.max = duration.toInt()

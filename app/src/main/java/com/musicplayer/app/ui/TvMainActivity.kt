@@ -286,6 +286,7 @@ class TvMainActivity : FullScreenActivity() {
     private fun updateNowPlaying() {
         val song = PlayerConnection.currentSong()
         binding.npTitle.text = song?.title ?: getString(R.string.no_song)
+        binding.npTitle.isSelected = true
         binding.npArtist.text = song?.artist ?: getString(R.string.from_device)
         val duration = PlayerConnection.durationMs()
         binding.npSeek.max = duration.toInt()
