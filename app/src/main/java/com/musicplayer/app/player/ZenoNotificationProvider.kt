@@ -4,8 +4,10 @@ import android.app.Notification
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.os.Build
 import android.os.Bundle
 import androidx.core.app.NotificationCompat
+import androidx.media.app.NotificationCompat.MediaStyle
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.session.CommandButton
 import androidx.media3.session.DefaultMediaNotificationProvider
@@ -13,6 +15,7 @@ import androidx.media3.session.MediaNotification
 import androidx.media3.session.MediaSession
 import com.google.common.collect.ImmutableList
 import com.musicplayer.app.R
+import com.musicplayer.app.data.AlbumArtLoader
 import com.musicplayer.app.data.Song
 import com.musicplayer.app.ui.LockActivity
 import com.musicplayer.app.ui.LuxuryPrefs
@@ -27,9 +30,22 @@ import com.musicplayer.app.ui.LuxuryPrefs
  * `createNotification` returns a [MediaNotification] instead of a raw
  * [Notification].
  *
- * Behaviour (same as before):
- * - Normal tracks: the standard Media3 notification.
- * - VLC tracks: a custom notification with broadcast actions.
+ * Behaviour (v1.0.10 — one custom notification for BOTH engines):
+ * - Always four actions: previous / play-pause / next / close (X), in
+ *   that order. The Media3 default provider only adds Next when the
+ *   player reports a next item (Util.getAvailableCommands adds
+ *   COMMAND_SEEK_TO_NEXT_MEDIA_ITEM only when hasNextMediaItem() is
+ *   true), so on the last song of a queue — or a single-song queue —
+ *   the notification showed only Previous + Pause. The custom actions
+ *   below call PlayerConnection directly, so Next is always there and
+ *   always runs the same logic as the player's Next button (including
+ *   the "play once then next" mode).
+ * - The notification is ongoing: it can never be swiped away, while
+ *   playing AND while paused. Only the X button closes it (see
+ *   [PlaybackService.ACTION_CLOSE_NOTIFICATION]).
+ * - Big notification: app name + song number in the queue, title,
+ *   artist, cover art, and the four buttons — Zeno identity (dark
+ *   navy + gold->cyan), same as the reference design.
  * - When the full lock screen option is on, tapping the notification
  *   opens LockActivity (blurred cover + full controls) instead of the app.
  *   The preference is read on every notification build, so toggling it
@@ -47,21 +63,16 @@ class ZenoNotificationProvider(context: Context) : MediaNotification.Provider {
         actionFactory: MediaNotification.ActionFactory,
         onNotificationChangedCallback: MediaNotification.Provider.Callback
     ): MediaNotification {
-        val result = if (VlcEngine.active) {
-            val song = PlayerConnection.currentSong()
-            if (song == null) {
-                defaultProvider.createNotification(
-                    mediaSession, mediaButtonPreferences, actionFactory, onNotificationChangedCallback
-                )
-            } else {
-                MediaNotification(
-                    DefaultMediaNotificationProvider.DEFAULT_NOTIFICATION_ID,
-                    buildVlcNotification(song)
-                )
-            }
-        } else {
+        val song = PlayerConnection.currentSong()
+        val result = if (song == null) {
+            // No song yet: fall back to the Media3 default notification.
             defaultProvider.createNotification(
                 mediaSession, mediaButtonPreferences, actionFactory, onNotificationChangedCallback
+            )
+        } else {
+            MediaNotification(
+                DefaultMediaNotificationProvider.DEFAULT_NOTIFICATION_ID,
+                buildNotification(mediaSession, song)
             )
         }
         if (LuxuryPrefs.lockScreenEnabled(appContext)) {
@@ -84,52 +95,88 @@ class ZenoNotificationProvider(context: Context) : MediaNotification.Provider {
         action: String,
         extras: Bundle
     ): Boolean {
-        return defaultProvider.handleCustomCommand(session, action, extras)
+        // No Media3 custom actions are used (all buttons are plain
+        // broadcasts / a service intent): let the session handle it.
+        return false
     }
 
-    /** Custom notification for VLC tracks (moved here from the old
-     * `PlaybackService.onUpdateNotification` override). */
-    private fun buildVlcNotification(song: Song): Notification {
-        val playing = VlcEngine.isPlaying
-        val toggleIntent = PendingIntent.getBroadcast(
-            appContext, 0,
-            Intent(appContext, VlcActionReceiver::class.java).setAction(VlcActionReceiver.ACTION_TOGGLE),
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
-        val prevIntent = PendingIntent.getBroadcast(
-            appContext, 1,
-            Intent(appContext, VlcActionReceiver::class.java).setAction(VlcActionReceiver.ACTION_PREV),
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
-        val nextIntent = PendingIntent.getBroadcast(
-            appContext, 2,
-            Intent(appContext, VlcActionReceiver::class.java).setAction(VlcActionReceiver.ACTION_NEXT),
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
-        val closeIntent = PendingIntent.getBroadcast(
-            appContext, 3,
-            Intent(appContext, VlcActionReceiver::class.java).setAction(VlcActionReceiver.ACTION_CLOSE),
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
-        return NotificationCompat.Builder(appContext, PlaybackService.NOTIFICATION_CHANNEL_ID)
+    /** One notification for both engines, built from the current song. */
+    private fun buildNotification(session: MediaSession, song: Song): Notification {
+        val player = session.player
+        val vlc = VlcEngine.active
+        val playing = if (vlc) VlcEngine.isPlaying else player.isPlaying
+        val positionMs = if (vlc) VlcEngine.positionMs else player.currentPosition
+        val index = player.currentMediaItemIndex
+        val count = player.mediaItemCount
+        val subText = if (index >= 0 && count > 0) {
+            "${appContext.getString(R.string.app_name)} • ${index + 1}/$count"
+        } else {
+            appContext.getString(R.string.app_name)
+        }
+        val builder = NotificationCompat.Builder(appContext, PlaybackService.NOTIFICATION_CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_music)
             .setContentTitle(song.title)
             .setContentText(song.artist)
-            .setSubText(appContext.getString(R.string.app_name))
+            .setSubText(subText)
+            .setContentIntent(session.sessionActivity)
+            // Ongoing in both states: the user closes it only with X.
             .setOngoing(true)
+            .setOnlyAlertOnce(true)
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
-            .setStyle(
-                androidx.media.app.NotificationCompat.MediaStyle()
-                    .setShowActionsInCompactView(0, 1, 2)
+            .setStyle(MediaStyle().setShowActionsInCompactView(0, 1, 2))
+            .addAction(
+                R.drawable.ic_previous,
+                appContext.getString(R.string.previous),
+                broadcastIntent(VlcActionReceiver.ACTION_PREV, 1)
             )
-            .addAction(R.drawable.ic_previous, appContext.getString(R.string.previous), prevIntent)
             .addAction(
                 if (playing) R.drawable.ic_pause else R.drawable.ic_play,
                 appContext.getString(if (playing) R.string.pause else R.string.play),
-                toggleIntent
+                broadcastIntent(VlcActionReceiver.ACTION_TOGGLE, 0)
             )
-            .addAction(R.drawable.ic_next, appContext.getString(R.string.next), nextIntent)
-            .addAction(R.drawable.ic_close, appContext.getString(R.string.close), closeIntent)
-            .build()
+            .addAction(
+                R.drawable.ic_next,
+                appContext.getString(R.string.next),
+                broadcastIntent(VlcActionReceiver.ACTION_NEXT, 2)
+            )
+            .addAction(
+                R.drawable.ic_close,
+                appContext.getString(R.string.close),
+                closeIntent()
+            )
+        // Cover art (same loader the player UI uses; cached, null when the
+        // track has no embedded picture).
+        try {
+            AlbumArtLoader.loadTrackCover(appContext, song)?.let { builder.setLargeIcon(it) }
+        } catch (e: Exception) {
+        }
+        // Elapsed time while playing (like the Media3 default notification).
+        if (playing) {
+            builder.setWhen(System.currentTimeMillis() - positionMs)
+                .setShowWhen(true)
+                .setUsesChronometer(true)
+        } else {
+            builder.setShowWhen(false)
+        }
+        if (Build.VERSION.SDK_INT >= 31) {
+            builder.setForegroundServiceBehavior(Notification.FOREGROUND_SERVICE_IMMEDIATE)
+        }
+        return builder.build()
     }
+
+    private fun broadcastIntent(action: String, requestCode: Int): PendingIntent =
+        PendingIntent.getBroadcast(
+            appContext, requestCode,
+            Intent(appContext, VlcActionReceiver::class.java).setAction(action),
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+    /** X: handled by the service itself (stop playback, dismiss, stopSelf). */
+    private fun closeIntent(): PendingIntent =
+        PendingIntent.getService(
+            appContext, 3,
+            Intent(appContext, PlaybackService::class.java)
+                .setAction(PlaybackService.ACTION_CLOSE_NOTIFICATION),
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
 }

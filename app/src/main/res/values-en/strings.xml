@@ -262,6 +262,9 @@
     <string name="play_once_off">Play once: off</string>
     <string name="play_once_on">Play once: on</string>
     <string name="play_once_then_next">Play once then next</string>
+    <string name="player_mode_label">Standard / Pro</string>
+    <string name="player_mode_pro">Pro</string>
+    <string name="player_mode_standard">Standard</string>
     <string name="queue_deleted">Queue deleted</string>
     <string name="queue_limit_reached">20-queue limit reached</string>
     <string name="removed_from_queue">Removed from queue</string>

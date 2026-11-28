@@ -262,6 +262,9 @@
     <string name="play_once_off">التشغيل مرة واحدة: متوقف</string>
     <string name="play_once_on">التشغيل مرة واحدة: يعمل</string>
     <string name="play_once_then_next">شغّل مرة واحدة ثم التالي</string>
+    <string name="player_mode_label">Standard / Pro</string>
+    <string name="player_mode_pro">محترف</string>
+    <string name="player_mode_standard">عادي</string>
     <string name="queue_deleted">تم حذف القائمة</string>
     <string name="queue_limit_reached">تم الوصول إلى حد 20 قائمة</string>
     <string name="removed_from_queue">تمت الإزالة من القائمة</string>

@@ -187,7 +187,11 @@ object PlayerConnection {
             VlcEngine.resume()
             return
         }
-        controller?.play()
+        val c = controller ?: return
+        // After a notification close the player is stopped (STATE_IDLE):
+        // play() alone does nothing until the player is prepared again.
+        if (c.playbackState == Player.STATE_IDLE) c.prepare()
+        c.play()
     }
 
     fun next() {

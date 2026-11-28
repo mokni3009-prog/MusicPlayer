@@ -154,7 +154,6 @@
                 <action android:name="com.musicplayer.app.VLC_PREV" />
                 <action android:name="com.musicplayer.app.VLC_TOGGLE" />
                 <action android:name="com.musicplayer.app.VLC_NEXT" />
-                <action android:name="com.musicplayer.app.VLC_CLOSE" />
             </intent-filter>
         </receiver>
 

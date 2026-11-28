@@ -91,13 +91,14 @@ jobs:
       - name: Publish release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v1.0.9
-          name: Zeno Play v1.0.9
+          tag_name: v1.0.10
+          name: Zeno Play v1.0.10
           body: |
-            Zeno Play v1.0.9 — bug fixes only: the equalizer now really changes the sound, and tag editing now really saves.
+            Zeno Play v1.0.10 — simpler full player + notification controls. No new features; the full player keeps everything, only the layout changes.
 
-            - FIXED (equalizer): the EQ, bass boost and reverb changed values on screen but never touched the sound. Root cause, verified against the Media3 1.5.1 source: Player.Listener.onAudioSessionIdChanged never fires unless the app calls player.setAudioSessionId() itself — the session id is generated silently at construction — so the equalizer was never attached to any audio session. The service now attaches the EQ, bass boost, reverb and visualizer explicitly to player.audioSessionId after every player build/rebuild. Balance/mono are also restored at service start (they used to reset silently on every service restart), and the VLC equalizer is re-applied once VLC really starts playing (plus bass boost on VLC). The self-test now verifies the live attachment instead of only the saved values.
-            - FIXED (tag editor): editing a title failed with "Failed to edit tags" and nothing was saved. Root cause: the manifest never declared WRITE_EXTERNAL_STORAGE, so on Android 9 File.canWrite() is false and the save failed in a branch that logged nothing (which is why no error report ever arrived). The permission is now declared (maxSdkVersion 28) and requested just in time when saving; on Android 10+ a MediaStore write request is used instead. Both silent failure branches now log to the error server, a full-date year (e.g. 20200125) is normalised to its year (2020), and after a successful edit MediaStore is rescanned and the library reloads so the new title shows without restarting.
+            - NEW (full player): Standard / Pro modes. A small "Standard / Pro" toggle under the progress bar switches with one tap (light fade + slide animation). Standard (the default) shows only the essentials — cover, title, progress, previous/play/next/shuffle/repeat, volume, lyrics and the bottom action buttons. Pro reveals the advanced tools row (-10s, speed, A-B repeat, play once). The mode is saved and restored on every open.
+            - CHANGED (full player): the "play once then next" button is now icon-only in Pro mode — a circular button with a next-arrow and a "1" badge, same size and style as the A, B, speed and -10s buttons. Same function; the text stays as the accessibility description.
+            - NEW (notification): the playback notification now always shows four buttons — previous / play-pause / next / close (X) — on both engines. Before, the Media3 notification only added Next when the player reported a next item, so on the last song of a queue (or a single-song queue) it showed only Previous + Pause. The notification is now ongoing in both playing and paused states: it can never be swiped away — only the X button closes it. X stops playback, dismisses the notification and stops the foreground service cleanly (saved queue and resume position are untouched; pressing play again in the app restarts playback).
 
-            Installs over v1.0.8 normally (same release key, no uninstall needed).
+            Installs over v1.0.9 normally (same release key, no uninstall needed).
           files: app/build/outputs/apk/release/*.apk

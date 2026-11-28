@@ -262,6 +262,9 @@
     <string name="play_once_off">Lecture unique : désactivée</string>
     <string name="play_once_on">Lecture unique : activée</string>
     <string name="play_once_then_next">Lire une fois puis suivant</string>
+    <string name="player_mode_label">Standard / Pro</string>
+    <string name="player_mode_pro">Pro</string>
+    <string name="player_mode_standard">Standard</string>
     <string name="queue_deleted">File supprimée</string>
     <string name="queue_limit_reached">Limite de 20 files atteinte</string>
     <string name="removed_from_queue">Retiré de la file</string>

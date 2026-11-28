@@ -4,6 +4,7 @@ import android.animation.Animator
 import android.animation.AnimatorListenerAdapter
 import android.animation.ObjectAnimator
 import android.content.ComponentName
+import android.content.res.ColorStateList
 import android.graphics.RenderEffect
 import android.graphics.Shader
 import android.hardware.Sensor
@@ -226,6 +227,14 @@ class PlayerActivity : FullScreenActivity() {
                 Toast.LENGTH_SHORT
             ).show()
         }
+        // Standard / Pro mode (v1.0.10): one tap switches the mode; the
+        // advanced tools row appears/disappears with a light animation.
+        binding.modeToggleButton.setOnClickListener {
+            Haptics.tap(it, this)
+            val pro = !LuxuryPrefs.playerProMode(this)
+            LuxuryPrefs.setPlayerProMode(this, pro)
+            applyPlayerMode(animate = true)
+        }
         binding.saveQueueButton.setOnClickListener { showSaveQueueDialog() }
         binding.queuesButton.setOnClickListener { showQueuesDialog() }
         binding.lyricsSearchOnline.setOnClickListener { loadLyricsForCurrent(forceOnline = true) }
@@ -324,6 +333,9 @@ class PlayerActivity : FullScreenActivity() {
             override fun onStartTrackingTouch(seekBar: SeekBar?) {}
             override fun onStopTrackingTouch(seekBar: SeekBar?) {}
         })
+
+        // Standard / Pro mode: restore the saved mode (Standard by default).
+        applyPlayerMode(animate = false)
     }
 
     override fun onStart() {
@@ -768,8 +780,46 @@ class PlayerActivity : FullScreenActivity() {
     }
 
     // ---- A-B repeat ----
+    /** Standard / Pro mode (v1.0.10). Pro reveals the advanced tools row
+     * (-10s, speed, A-B, play once) with a light fade + slide; Standard
+     * hides it. The toggle pill shows the current mode. Nothing else is
+     * touched: every feature stays reachable, only the row hides. */
+    private fun applyPlayerMode(animate: Boolean) {
+        val pro = LuxuryPrefs.playerProMode(this)
+        binding.modeToggleButton.text =
+            getString(if (pro) R.string.player_mode_pro else R.string.player_mode_standard)
+        binding.modeToggleButton.setBackgroundResource(
+            if (pro) R.drawable.bg_chip_selected else R.drawable.bg_chip
+        )
+        binding.modeToggleButton.setTextColor(
+            getColor(if (pro) R.color.zeno_on_gradient else R.color.zeno_ink)
+        )
+        if (animate) {
+            if (pro) {
+                binding.toolsRow.visibility = View.VISIBLE
+                binding.toolsRow.alpha = 0f
+                binding.toolsRow.translationY = -12f
+                binding.toolsRow.animate().alpha(1f).translationY(0f).setDuration(180).start()
+                updateAbStatus()
+            } else {
+                binding.abStatus.visibility = View.GONE
+                binding.toolsRow.animate().alpha(0f).translationY(-12f).setDuration(150)
+                    .withEndAction {
+                        binding.toolsRow.visibility = View.GONE
+                        binding.toolsRow.alpha = 1f
+                        binding.toolsRow.translationY = 0f
+                    }.start()
+            }
+        } else {
+            binding.toolsRow.visibility = if (pro) View.VISIBLE else View.GONE
+            if (pro) updateAbStatus() else binding.abStatus.visibility = View.GONE
+        }
+    }
+
     private fun updateAbStatus() {
-        if (PlayerConnection.abEnabled) {
+        // The A-B status line belongs to the advanced tools: it only shows
+        // in Pro mode (the loop itself keeps running in Standard mode).
+        if (PlayerConnection.abEnabled && LuxuryPrefs.playerProMode(this)) {
             binding.abStatus.visibility = View.VISIBLE
             binding.abStatus.text = getString(
                 R.string.ab_active,
@@ -782,9 +832,12 @@ class PlayerActivity : FullScreenActivity() {
     }
 
     private fun updatePlayOnceButton() {
-        binding.playOnceButton.alpha = if (PlayerConnection.playOnceThenNext) 1.0f else 0.45f
-        binding.playOnceButton.setTextColor(
-            getColor(if (PlayerConnection.playOnceThenNext) R.color.zeno_cyan else R.color.zeno_ink)
+        // Icon-only button (v1.0.10): the "1" badge is part of the icon's
+        // meaning (once, then next); the on/off state is alpha + tint.
+        val active = PlayerConnection.playOnceThenNext
+        binding.playOnceButton.alpha = if (active) 1.0f else 0.45f
+        binding.playOnceButton.imageTintList = ColorStateList.valueOf(
+            getColor(if (active) R.color.zeno_cyan else R.color.zeno_ink)
         )
     }
 

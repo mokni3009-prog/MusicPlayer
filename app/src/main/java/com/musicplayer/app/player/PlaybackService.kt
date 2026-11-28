@@ -75,6 +75,10 @@ class PlaybackService : MediaLibraryService() {
         const val FOLDERS_ID = "folders"
 
         internal const val NOTIFICATION_CHANNEL_ID = "zeno_playback"
+
+        /** Notification X button: stop playback, dismiss the notification
+         * and stop the foreground service (handled in onStartCommand). */
+        const val ACTION_CLOSE_NOTIFICATION = "com.musicplayer.app.CLOSE_NOTIFICATION"
         private const val SLEEP_FADE_MS = 10_000L
         private const val TICK_MS = 250L
         private const val SAVE_POSITION_EVERY_MS = 5_000L
@@ -82,6 +86,9 @@ class PlaybackService : MediaLibraryService() {
 
     private var player: ExoPlayer? = null
     private var session: MediaLibrarySession? = null
+    /** True after a notification close set the idle-notification mode to
+     * NEVER; cleared again when playback resumes (mode restored). */
+    private var idleNotificationModeChanged = false
     private var visualizer: Visualizer? = null
     private val spectrumProcessor = SpectrumAudioProcessor()
     private val gainProcessor = GainAudioProcessor()
@@ -387,10 +394,23 @@ class PlaybackService : MediaLibraryService() {
             }
         }
 
+        @OptIn(UnstableApi::class)
         override fun onPlaybackStateChanged(playbackState: Int) {
             if (playbackState == Player.STATE_ENDED) {
                 recordPlayIfListened()
                 handleTrackFinished()
+            }
+            // Playback resumed after a notification close: restore the
+            // default idle-notification behaviour (only changed by the
+            // close handler, so this runs at most once per close).
+            if (playbackState == Player.STATE_READY && idleNotificationModeChanged) {
+                idleNotificationModeChanged = false
+                try {
+                    setShowNotificationForIdlePlayer(
+                        SHOW_NOTIFICATION_FOR_IDLE_PLAYER_AFTER_STOP_OR_ERROR
+                    )
+                } catch (e: Exception) {
+                }
             }
         }
 
@@ -847,6 +867,12 @@ class PlaybackService : MediaLibraryService() {
     // ---- Lifecycle -----------------------------------------------------------
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        // Notification X button: stop playback, dismiss the notification
+        // and stop the foreground service (see closeFromNotification).
+        if (intent?.action == ACTION_CLOSE_NOTIFICATION) {
+            closeFromNotification()
+            return super.onStartCommand(intent, flags, startId)
+        }
         // Music alarm: start the chosen song, volume rising gradually.
         if (intent?.action == com.musicplayer.app.ui.AlarmActivity.ACTION_ALARM) {
             val songId = intent.getLongExtra(
@@ -855,6 +881,56 @@ class PlaybackService : MediaLibraryService() {
             if (songId >= 0) handleAlarm(songId)
         }
         return super.onStartCommand(intent, flags, startId)
+    }
+
+    /** Notification X button (v1.0.10): stop playback, dismiss the
+     * notification and stop the foreground service — cleanly.
+     *
+     * How it works, and why each step is needed (verified against the
+     * Media3 1.5.1 source):
+     * - The notification is ongoing, so it can never be swiped away;
+     *   only this path removes it.
+     * - `player.stop()` puts the player in STATE_IDLE. That alone is
+     *   not enough: with the default idle mode
+     *   (SHOW_NOTIFICATION_FOR_IDLE_PLAYER_AFTER_STOP_OR_ERROR) the
+     *   notification manager would re-post the notification on the
+     *   next update, so the mode is switched to NEVER first — then the
+     *   manager removes the notification itself (stopForeground(true)
+     *   + cancel), with no race.
+     * - `stopSelf()` ends the service once the app unbinds; while the
+     *   app is open and bound, the service simply lingers with no
+     *   notification and no playback.
+     * - Nothing is erased: the saved queue / resume position live in
+     *   PlaybackStateStore (written while playing), the in-app updater
+     *   and the error reporter run outside this service, and pressing
+     *   play again in the app restarts playback (PlayerConnection.play
+     *   re-prepares an IDLE player, and the VLC routing still applies
+     *   through onPlayerError / onMediaItemTransition).
+     */
+    @OptIn(UnstableApi::class)
+    private fun closeFromNotification() {
+        try {
+            VlcEngine.stop()
+        } catch (e: Exception) {
+        }
+        PlayerConnection.playOnceThenNext = false
+        try {
+            player?.pause()
+        } catch (e: Exception) {
+        }
+        try {
+            setShowNotificationForIdlePlayer(SHOW_NOTIFICATION_FOR_IDLE_PLAYER_NEVER)
+            idleNotificationModeChanged = true
+        } catch (e: Exception) {
+        }
+        try {
+            player?.stop()
+        } catch (e: Exception) {
+        }
+        try {
+            stopSelf()
+        } catch (e: Exception) {
+        }
     }
 
     /** Alarm: play the chosen song (library from that song on), starting

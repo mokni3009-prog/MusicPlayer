@@ -214,6 +214,44 @@
 
             </LinearLayout>
 
+            <!-- Player mode toggle (v1.0.10): Standard shows only the
+                 essentials; Pro reveals the advanced tools row below. -->
+            <LinearLayout
+                android:id="@+id/modeToggleRow"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:gravity="center"
+                android:orientation="horizontal">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginEnd="10dp"
+                    android:text="@string/player_mode_label"
+                    android:textColor="@color/zeno_ink2"
+                    android:textSize="13sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/modeToggleButton"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:background="@drawable/bg_chip"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:foreground="?attr/selectableItemBackground"
+                    android:paddingStart="16dp"
+                    android:paddingTop="6dp"
+                    android:paddingEnd="16dp"
+                    android:paddingBottom="6dp"
+                    android:text="@string/player_mode_standard"
+                    android:textColor="@color/zeno_ink"
+                    android:textSize="13sp"
+                    android:textStyle="bold" />
+
+            </LinearLayout>
+
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
@@ -297,8 +335,9 @@
 
             </LinearLayout>
 
-            <!-- Tools row: -10s, speed, A-B, play once -->
+            <!-- Tools row: -10s, speed, A-B, play once (Pro mode only) -->
             <LinearLayout
+                android:id="@+id/toolsRow"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="14dp"
@@ -365,19 +404,40 @@
                     android:textSize="13sp"
                     android:textStyle="bold" />
 
-                <TextView
-                    android:id="@+id/playOnceButton"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:background="@drawable/bg_chip"
-                    android:paddingStart="12dp"
-                    android:paddingTop="8dp"
-                    android:paddingEnd="12dp"
-                    android:paddingBottom="8dp"
-                    android:text="@string/play_once_then_next"
-                    android:textColor="@color/zeno_ink"
-                    android:textSize="13sp"
-                    android:textStyle="bold" />
+                <!-- Play once then next: icon only (v1.0.10). The "1" badge
+                     is part of the icon's meaning (once, then next); the
+                     on/off state is shown by alpha + tint, like before. -->
+                <FrameLayout
+                    android:layout_width="40dp"
+                    android:layout_height="40dp">
+
+                    <ImageButton
+                        android:id="@+id/playOnceButton"
+                        android:layout_width="40dp"
+                        android:layout_height="40dp"
+                        android:background="@drawable/bg_chip"
+                        android:contentDescription="@string/play_once_then_next"
+                        android:padding="8dp"
+                        android:scaleType="fitCenter"
+                        android:src="@drawable/ic_next"
+                        android:tint="@color/zeno_ink" />
+
+                    <TextView
+                        android:id="@+id/playOnceBadge"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_gravity="top|end"
+                        android:background="@drawable/bg_chip_selected"
+                        android:gravity="center"
+                        android:minWidth="14dp"
+                        android:paddingStart="3dp"
+                        android:paddingEnd="3dp"
+                        android:text="1"
+                        android:textColor="@color/zeno_on_gradient"
+                        android:textSize="9sp"
+                        android:textStyle="bold" />
+
+                </FrameLayout>
 
             </LinearLayout>
 

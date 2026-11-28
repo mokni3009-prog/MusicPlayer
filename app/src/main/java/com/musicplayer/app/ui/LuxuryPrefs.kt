@@ -67,6 +67,12 @@ object LuxuryPrefs {
     fun doubleTapLikeEnabled(context: Context): Boolean = getBool(context, "doubletap_like_enabled", true)
     fun setDoubleTapLikeEnabled(context: Context, v: Boolean) = putBool(context, "doubletap_like_enabled", v)
 
+    // 12. Full player mode (v1.0.10): Standard (false) shows only the
+    // essentials; Pro (true) reveals the advanced tools row (-10s,
+    // speed, A-B, play once). Standard is the default.
+    fun playerProMode(context: Context): Boolean = getBool(context, "player_pro_mode", false)
+    fun setPlayerProMode(context: Context, v: Boolean) = putBool(context, "player_pro_mode", v)
+
     private fun getBool(context: Context, key: String, def: Boolean): Boolean {
         return try {
             context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean(key, def)
