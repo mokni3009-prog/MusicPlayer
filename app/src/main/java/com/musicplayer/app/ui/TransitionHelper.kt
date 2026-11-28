@@ -12,14 +12,13 @@ import android.view.View
 import android.view.ViewAnimationUtils
 import android.view.animation.AccelerateDecelerateInterpolator
 import android.view.animation.LinearInterpolator
-import androidx.core.util.Pair as CorePair
-import com.google.android.material.transition.MaterialContainerTransform
+import com.google.android.material.transition.platform.MaterialContainerTransform
 import com.musicplayer.app.R
 import com.musicplayer.app.ui.MotionStyle.Companion.usesSharedElement
-import androidx.transition.ChangeBounds
-import androidx.transition.ChangeImageTransform
-import androidx.transition.ChangeTransform
-import androidx.transition.TransitionSet
+import android.transition.ChangeBounds
+import android.transition.ChangeImageTransform
+import android.transition.ChangeTransform
+import android.transition.TransitionSet
 
 /**
  * Applies the chosen navigation motion style to every activity launch
@@ -48,7 +47,7 @@ object TransitionHelper {
         if (style.usesSharedElement() && sharedView != null && sharedName != null) {
             intent.putExtra(EXTRA_SHARED_USED, true)
             val options = ActivityOptions.makeSceneTransitionAnimation(
-                activity, CorePair.create(sharedView, sharedName)
+                activity, android.util.Pair(sharedView, sharedName)
             )
             activity.startActivity(intent, options.toBundle())
             return

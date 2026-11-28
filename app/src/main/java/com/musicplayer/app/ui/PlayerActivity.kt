@@ -870,14 +870,14 @@ class PlayerActivity : FullScreenActivity() {
                 val name = input.text.toString().trim()
                 if (name.isEmpty()) return@setPositiveButton
                 val songs = PlayerConnection.songs
-                val ok = QueueStore.create(
+                QueueStore.create(
                     this, name, songs.map { it.id },
                     PlayerConnection.currentIndex(),
                     PlayerConnection.currentPositionMs()
                 )
                 Toast.makeText(
                     this,
-                    if (ok) R.string.queue_saved else R.string.queue_limit_reached,
+                    R.string.queue_saved,
                     Toast.LENGTH_SHORT
                 ).show()
             }
@@ -886,7 +886,7 @@ class PlayerActivity : FullScreenActivity() {
     }
 
     private fun showQueuesDialog() {
-        val queues = QueueStore.list(this)
+        val queues = QueueStore.load(this)
         if (queues.isEmpty()) {
             Toast.makeText(this, R.string.no_saved_queues, Toast.LENGTH_SHORT).show()
             return
@@ -902,7 +902,7 @@ class PlayerActivity : FullScreenActivity() {
                     Toast.makeText(this, R.string.queue_empty, Toast.LENGTH_SHORT).show()
                     return@setItems
                 }
-                PlayerConnection.playSongs(songs, index)
+                PlayerConnection.playSongs(songs, queue.index)
                 if (queue.positionMs > 0) PlayerConnection.seekTo(queue.positionMs)
             }
             .setNeutralButton(R.string.delete_queue) { _, _ -> showDeleteQueueDialog(queues) }

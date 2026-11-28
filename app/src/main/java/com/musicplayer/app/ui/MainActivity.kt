@@ -86,7 +86,7 @@ class MainActivity : FullScreenActivity() {
         data class Album(val name: String) : Filter()
         data class Artist(val name: String) : Filter()
         data class Folder(val name: String) : Filter()
-        data class Playlist(val playlist: Playlist) : Filter()
+        data class Playlist(val playlist: com.musicplayer.app.data.Playlist) : Filter()
         data class Smart(val type: SmartType) : Filter()
         object Favorites : Filter()
     }
@@ -610,7 +610,7 @@ class MainActivity : FullScreenActivity() {
                 }
                 is Filter.Favorites -> favorites.contains(song.id)
             }
-            val queryOk = q.isEmpty() || song.matchesQuery(q)
+            val queryOk = q.isEmpty() || MusicRepository.matchesQuery(song, MusicRepository.normalizeForSearch(q))
             filterOk && queryOk
         }
     }

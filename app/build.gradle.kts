@@ -85,9 +85,9 @@ dependencies {
     // NOTE: staying on 1.4.1 (known good with this codebase); newer
     // Media3 needs a newer compileSdk, which we now have (36), but the
     // upgrade is out of scope for v1.0.4.
-    implementation("androidx.media3:media3-exoplayer:1.4.1")
-    implementation("androidx.media3:media3-session:1.4.1")
-    implementation("androidx.media3:media3-common:1.4.1")
+    implementation("androidx.media3:media3-exoplayer:1.5.1")
+    implementation("androidx.media3:media3-session:1.5.1")
+    implementation("androidx.media3:media3-common:1.5.1")
 
     // libVLC — secondary engine for rare audio formats Media3 cannot read
     // (APE, DSD, WavPack, MPC, tracker, WMA...). Media3 stays the primary

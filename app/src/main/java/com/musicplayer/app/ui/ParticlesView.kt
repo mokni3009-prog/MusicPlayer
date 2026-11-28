@@ -33,6 +33,8 @@ class ParticlesView @JvmOverloads constructor(
     private val particles = mutableListOf<Particle>()
     private var running = false
     private var time = 0f
+    /** Particle density level: 0 = low (12), 1 = medium (26), 2 = high (48). */
+    private var particleCount = 26
 
     private val ticker = object : Runnable {
         override fun run() {
@@ -45,12 +47,19 @@ class ParticlesView @JvmOverloads constructor(
 
     override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
         super.onSizeChanged(w, h, oldw, oldh)
+        createParticles()
+    }
+
+    private fun createParticles() {
+        val w = width
+        val h = height
+        if (w <= 0 || h <= 0) return
         particles.clear()
         val random = Random(42)
         val cx = w / 2f
         val cy = h / 2f
         val base = (kotlin.math.min(w, h) / 2f) * 0.62f
-        for (i in 0 until 26) {
+        for (i in 0 until particleCount) {
             particles.add(
                 Particle(
                     angle = random.nextFloat() * 360f,
@@ -65,6 +74,16 @@ class ParticlesView @JvmOverloads constructor(
         // keeping the computation local to the draw pass.
         @Suppress("UNUSED_VARIABLE")
         val center = cx to cy
+    }
+
+    /** Sets the particle density (0 = low, 1 = medium, 2 = high). */
+    fun setDensity(level: Int) {
+        particleCount = when (level) {
+            0 -> 12
+            2 -> 48
+            else -> 26
+        }
+        createParticles()
     }
 
     fun setRunning(value: Boolean) {

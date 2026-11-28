@@ -8,6 +8,7 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.media.AudioDeviceCallback
 import android.media.AudioManager
 import android.media.audiofx.Visualizer
 import android.os.Build
@@ -28,7 +29,8 @@ import androidx.media3.exoplayer.audio.AudioSink
 import androidx.media3.exoplayer.audio.DefaultAudioSink
 import androidx.media3.session.LibraryResult
 import androidx.media3.session.MediaLibraryService
-import androidx.media3.session.MediaLibrarySession
+import androidx.media3.session.MediaLibraryService.LibraryParams
+import androidx.media3.session.MediaLibraryService.MediaLibrarySession
 import androidx.media3.session.MediaSession
 import androidx.media3.session.SessionError
 import com.google.common.collect.ImmutableList
@@ -42,7 +44,6 @@ import com.musicplayer.app.data.PlaylistStore
 import com.musicplayer.app.data.Song
 import com.musicplayer.app.report.ErrorReporter
 import org.jaudiotagger.audio.AudioFileIO
-import org.jaudiotagger.tag.FieldKey
 
 /**
  * Background playback service (Media3 MediaLibraryService — Android Auto
@@ -111,7 +112,7 @@ class PlaybackService : MediaLibraryService() {
         }
     }
 
-    private val audioDeviceCallback = object : AudioManager.AudioDeviceCallback() {
+    private val audioDeviceCallback = object : AudioDeviceCallback() {
         override fun onAudioDevicesAdded(addedDevices: Array<out android.media.AudioDeviceInfo>) {
             refreshEqOutput()
         }
@@ -463,9 +464,9 @@ class PlaybackService : MediaLibraryService() {
                     if (file.exists() && file.canRead()) {
                         val audioFile = AudioFileIO.read(file)
                         val tag = audioFile.tag
-                        val trackGain = tag?.getFirst(FieldKey.REPLAYGAIN_TRACK_GAIN)
+                        val trackGain = tag?.getFirst("REPLAYGAIN_TRACK_GAIN")
                             ?.trim()?.removeSuffix(" dB")?.toFloatOrNull()
-                        val albumGain = tag?.getFirst(FieldKey.REPLAYGAIN_ALBUM_GAIN)
+                        val albumGain = tag?.getFirst("REPLAYGAIN_ALBUM_GAIN")
                             ?.trim()?.removeSuffix(" dB")?.toFloatOrNull()
                         val db = trackGain ?: albumGain
                         if (db != null) {
@@ -696,7 +697,7 @@ class PlaybackService : MediaLibraryService() {
         override fun onGetLibraryRoot(
             session: MediaLibrarySession,
             browser: MediaSession.ControllerInfo,
-            params: MediaLibrarySession.LibraryParams?
+            params: LibraryParams?
         ): ListenableFuture<LibraryResult<MediaItem>> {
             val root = browsable(
                 ROOT_ID,
@@ -712,7 +713,7 @@ class PlaybackService : MediaLibraryService() {
             parentId: String,
             page: Int,
             pageSize: Int,
-            params: MediaLibrarySession.LibraryParams?
+            params: LibraryParams?
         ): ListenableFuture<LibraryResult<ImmutableList<MediaItem>>> {
             val songs = library()
             val items: List<MediaItem> = when {
@@ -783,7 +784,7 @@ class PlaybackService : MediaLibraryService() {
                 Futures.immediateFuture(LibraryResult.ofItem(item, null))
             } else {
                 Futures.immediateFuture(
-                    LibraryResult.ofError(SessionError(SessionError.ERROR_BAD_VALUE))
+                    LibraryResult.ofError(SessionError(SessionError.ERROR_BAD_VALUE, "Bad value"))
                 )
             }
         }
@@ -792,7 +793,7 @@ class PlaybackService : MediaLibraryService() {
             session: MediaLibrarySession,
             browser: MediaSession.ControllerInfo,
             query: String,
-            params: MediaLibrarySession.LibraryParams?
+            params: LibraryParams?
         ): ListenableFuture<LibraryResult<Void>> {
             return Futures.immediateFuture(LibraryResult.ofVoid(params))
         }
@@ -803,10 +804,10 @@ class PlaybackService : MediaLibraryService() {
             query: String,
             page: Int,
             pageSize: Int,
-            params: MediaLibrarySession.LibraryParams?
+            params: LibraryParams?
         ): ListenableFuture<LibraryResult<ImmutableList<MediaItem>>> {
             val songs = library()
-            val results = songs.filter { it.matchesQuery(query) }.map { playable(it) }
+            val results = songs.filter { MusicRepository.matchesQuery(it, MusicRepository.normalizeForSearch(query)) }.map { playable(it) }
             val from = (page * pageSize).coerceAtMost(results.size)
             val to = ((page + 1) * pageSize).coerceAtMost(results.size)
             return Futures.immediateFuture(

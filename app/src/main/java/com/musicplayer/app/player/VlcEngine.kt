@@ -242,13 +242,13 @@ object VlcEngine {
                 player.setEqualizer(null)
                 return
             }
-            val eq = org.videolan.libvlc.Equalizer.create()
+            val eq = org.videolan.libvlc.MediaPlayer.Equalizer.create()
             // VLC bands (Hz): 60, 170, 310, 600, 1000, 3000, 6000, 12000, 14000, 16000.
             // Map our 5 bands onto them (nearest neighbours, smooth blend).
             val map = intArrayOf(0, 2, 4, 6, 8)
             for (i in bandsDb.indices) {
                 if (i >= map.size) break
-                eq.setBandAmp(map[i], bandsDb[i])
+                eq.setAmp(map[i], bandsDb[i])
             }
             player.setEqualizer(eq)
         } catch (e: Exception) {

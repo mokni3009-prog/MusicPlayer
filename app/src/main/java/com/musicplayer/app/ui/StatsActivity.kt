@@ -51,7 +51,7 @@ class StatsActivity : FullScreenActivity() {
                 val byArtist = HashMap<String, Long>()
                 val bySong = ArrayList<Pair<String, Long>>()
                 for (song in library) {
-                    val c = counts[song.id] ?: 0L
+                    val c = (counts[song.id] ?: 0).toLong()
                     if (c > 0) {
                         byArtist[song.artist] = (byArtist[song.artist] ?: 0L) + c
                         bySong.add(song.title to c)

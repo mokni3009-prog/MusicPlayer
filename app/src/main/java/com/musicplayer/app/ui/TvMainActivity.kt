@@ -89,7 +89,7 @@ class TvMainActivity : FullScreenActivity() {
             favorites = emptySet(),
             onFavorite = { song -> toggleFavorite(song) }
         )
-        groupAdapter = GroupAdapter(emptyList()) { item -> onGroupClick(item) }
+        groupAdapter = GroupAdapter(emptyList(), onClick = { item -> onGroupClick(item) })
 
         binding.menuAll.setOnClickListener { showAll() }
         binding.menuAlbums.setOnClickListener { showAlbums() }

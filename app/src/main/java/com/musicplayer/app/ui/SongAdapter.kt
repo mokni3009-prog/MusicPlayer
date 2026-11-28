@@ -7,6 +7,7 @@ import android.widget.PopupMenu
 import androidx.recyclerview.widget.RecyclerView
 import com.musicplayer.app.R
 import com.musicplayer.app.data.AlbumArtLoader
+import com.musicplayer.app.data.MusicRepository
 import com.musicplayer.app.data.Song
 import com.musicplayer.app.databinding.ItemSongBinding
 
@@ -148,7 +149,7 @@ class SongAdapter(
         songs = if (q.isEmpty()) {
             fullList
         } else {
-            fullList.filter { it.matchesQuery(q) }
+            fullList.filter { MusicRepository.matchesQuery(it, MusicRepository.normalizeForSearch(q)) }
         }
         notifyDataSetChanged()
     }

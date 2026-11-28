@@ -6,6 +6,7 @@ import android.view.View
 import android.view.WindowManager
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.WindowCompat
+import com.musicplayer.app.R
 
 /**
  * Base activity for every Zeno Play screen.
