@@ -256,7 +256,35 @@ object TransitionHelper {
         return TransitionSet().apply {
             addTransition(SafeContainerTransform())
             addTransition(ChangeBounds().apply { duration = 450 })
-            addTransition(ChangeTransform().apply { duration = 450 })
+            // ChangeTransform with reparent DISABLED — root cause of the
+            // v1.0.6 crash (NPE in ChangeTransform.captureValues:206,
+            // Redmi Android 16, opening the full player):
+            // MaterialContainerTransformSharedElementCallback tags the shared
+            // element with its snapshot view, and MaterialContainerTransform's
+            // capture then swaps transitionValues.view to that snapshot — a
+            // detached ImageView whose parent is null. TransitionValues is
+            // shared mutable state, so the same object is handed to the next
+            // sibling in this set. With the default reparent=true,
+            // ChangeTransform.captureValues unconditionally calls
+            // parent.transformMatrixToGlobal(...) and NPEs on the snapshot.
+            // The framework's own captureHierarchy guard cannot help: it
+            // passed for the attached disc, and the swap happens inside the
+            // capture, after the guard. With reparent=false the parent block
+            // in captureValues is skipped entirely (verified against the
+            // AOSP 16 source), so the NPE is impossible — while the morph
+            // itself is still driven by the container transform + ChangeBounds
+            // + ChangeImageTransform. ChangeBounds and ChangeImageTransform
+            // were verified null-parent-safe (ChangeBounds returns null from
+            // createAnimator when a parent is null; ChangeImageTransform never
+            // touches the parent). Do NOT restore the view in
+            // SafeContainerTransform after the delegate's capture: the
+            // container transform's animator draws the snapshot bitmap as its
+            // start content, and restoring would silently replace it with the
+            // card background.
+            addTransition(ChangeTransform().apply {
+                duration = 450
+                setReparent(false)
+            })
             addTransition(ChangeImageTransform().apply { duration = 450 })
             ordering = TransitionSet.ORDERING_TOGETHER
         }

@@ -91,17 +91,13 @@ jobs:
       - name: Publish release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v1.0.6
-          name: Zeno Play v1.0.6
+          tag_name: v1.0.7
+          name: Zeno Play v1.0.7
           body: |
-            Zeno Play v1.0.6 — bugfix release (signed with the permanent release key).
+            Zeno Play v1.0.7 — bugfix release (signed with the permanent release key).
 
-            - FIXED: full-player crash on open (IllegalArgumentException: android:id/content is not a valid ancestor, in MaterialContainerTransform.createAnimator). Root cause: the shared view handed to the scene transition was the inner ImageView while the transitionName lived on its parent card, and neither activity set the MaterialContainerTransformSharedElementCallback the library requires. The launch now passes the card that carries the transitionName, both activities set the callback, and the transform itself is guarded so it can never crash the app again (the other shared-element motions still fly the cover). All 22 motion styles were audited — every animation resource and label exists and every path is guarded.
-            - FIXED: volume slider barely changed the loudness (only 0% muted) and the 200% boost felt fake. The 0..100% range was linear amplitude (-6 dB at 50%), so it is now a perceptual square-law curve that feels graduated across the whole travel. The 200% boost used a plain tanh limiter that squashed loud tracks; it now has a knee limiter (linear below 0.9, rounded only above it), so 200% is a real +6 dB. The service also re-applies the slider volume when switching back from VLC to ExoPlayer and after a fallback player rebuild, where the setting used to be silently lost.
-            - FIXED: Settings popups (sleep timer, waveform shape, motion type…) showed as plain grey Android boxes. Every popup menu and dialog in the app now uses the Zeno identity (dark navy background, gold accents, cream text, rounded corners) via the app theme.
-            - CHANGED: the "free forever · no ads · privacy respected" line now appears ONLY on the splash screen; it was removed from the main header and from Settings. The splash itself is unchanged (3 seconds, animated logo, the three promises).
-            - FIXED: in the full player, the repeat-one "1" badge hung below the repeat button, outside its bounds. It is now a small gold badge chip inside the button box (top-right corner), same on the Now Playing card.
+            - FIXED: the full player STILL crashed on open on some phones (NullPointerException in ChangeTransform.captureValues, Redmi Android 16). The v1.0.6 fix was incomplete: the MaterialContainerTransformSharedElementCallback tags the shared element with its snapshot view, and the container transform's capture swaps transitionValues.view to that detached snapshot — then the sibling ChangeTransform in the same set dereferenced its null parent. Root cause verified against the AOSP 16 + Material 1.12.0 sources. The shared-element set now runs ChangeTransform with reparent=false, which never touches the parent (the morph itself is still driven by the container transform + ChangeBounds + ChangeImageTransform, and all 22 motion styles still work).
             - No new features in this version.
 
-            Installs over v1.0.5 normally (same release key, no uninstall needed).
+            Installs over v1.0.6 normally (same release key, no uninstall needed).
           files: app/build/outputs/apk/release/*.apk
