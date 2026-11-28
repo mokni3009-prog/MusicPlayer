@@ -780,10 +780,11 @@ class PlayerActivity : FullScreenActivity() {
     }
 
     // ---- A-B repeat ----
-    /** Standard / Pro mode (v1.0.10). Pro reveals the advanced tools row
-     * (-10s, speed, A-B, play once) with a light fade + slide; Standard
-     * hides it. The toggle pill shows the current mode. Nothing else is
-     * touched: every feature stays reachable, only the row hides. */
+    /** Standard / Pro mode (v1.0.10, extended in v1.0.11). Pro reveals the
+     * advanced tools row (-10s, speed, A-B, play once) plus the lyrics and
+     * queue sections, with a light fade + slide; Standard hides them all.
+     * The toggle pill shows the current mode. Nothing else is touched:
+     * every feature stays reachable, only the rows hide. */
     private fun applyPlayerMode(animate: Boolean) {
         val pro = LuxuryPrefs.playerProMode(this)
         binding.modeToggleButton.text =
@@ -794,24 +795,31 @@ class PlayerActivity : FullScreenActivity() {
         binding.modeToggleButton.setTextColor(
             getColor(if (pro) R.color.zeno_on_gradient else R.color.zeno_ink)
         )
+        val modeSections = listOf(binding.toolsRow, binding.lyricsSection, binding.queueSection)
         if (animate) {
             if (pro) {
-                binding.toolsRow.visibility = View.VISIBLE
-                binding.toolsRow.alpha = 0f
-                binding.toolsRow.translationY = -12f
-                binding.toolsRow.animate().alpha(1f).translationY(0f).setDuration(180).start()
+                for (section in modeSections) {
+                    section.visibility = View.VISIBLE
+                    section.alpha = 0f
+                    section.translationY = -12f
+                    section.animate().alpha(1f).translationY(0f).setDuration(180).start()
+                }
                 updateAbStatus()
             } else {
                 binding.abStatus.visibility = View.GONE
-                binding.toolsRow.animate().alpha(0f).translationY(-12f).setDuration(150)
-                    .withEndAction {
-                        binding.toolsRow.visibility = View.GONE
-                        binding.toolsRow.alpha = 1f
-                        binding.toolsRow.translationY = 0f
-                    }.start()
+                for (section in modeSections) {
+                    section.animate().alpha(0f).translationY(-12f).setDuration(150)
+                        .withEndAction {
+                            section.visibility = View.GONE
+                            section.alpha = 1f
+                            section.translationY = 0f
+                        }.start()
+                }
             }
         } else {
-            binding.toolsRow.visibility = if (pro) View.VISIBLE else View.GONE
+            for (section in modeSections) {
+                section.visibility = if (pro) View.VISIBLE else View.GONE
+            }
             if (pro) updateAbStatus() else binding.abStatus.visibility = View.GONE
         }
     }

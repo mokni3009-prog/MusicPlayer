@@ -91,14 +91,12 @@ jobs:
       - name: Publish release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v1.0.10
-          name: Zeno Play v1.0.10
+          tag_name: v1.0.11
+          name: Zeno Play v1.0.11
           body: |
-            Zeno Play v1.0.10 — simpler full player + notification controls. No new features; the full player keeps everything, only the layout changes.
+            Zeno Play v1.0.11 — the lyrics and queue sections now follow the Standard / Pro mode. No new features; the full player keeps everything, only the layout changes.
 
-            - NEW (full player): Standard / Pro modes. A small "Standard / Pro" toggle under the progress bar switches with one tap (light fade + slide animation). Standard (the default) shows only the essentials — cover, title, progress, previous/play/next/shuffle/repeat, volume, lyrics and the bottom action buttons. Pro reveals the advanced tools row (-10s, speed, A-B repeat, play once). The mode is saved and restored on every open.
-            - CHANGED (full player): the "play once then next" button is now icon-only in Pro mode — a circular button with a next-arrow and a "1" badge, same size and style as the A, B, speed and -10s buttons. Same function; the text stays as the accessibility description.
-            - NEW (notification): the playback notification now always shows four buttons — previous / play-pause / next / close (X) — on both engines. Before, the Media3 notification only added Next when the player reported a next item, so on the last song of a queue (or a single-song queue) it showed only Previous + Pause. The notification is now ongoing in both playing and paused states: it can never be swiped away — only the X button closes it. X stops playback, dismisses the notification and stops the foreground service cleanly (saved queue and resume position are untouched; pressing play again in the app restarts playback).
+            - CHANGED (full player): the "Paroles" (lyrics) section and the "Suivant dans la file" (up next) section are now hidden in Standard mode and shown in Pro mode, with the same light fade + slide animation as the advanced tools row. They use the same saved mode and the same toggle as v1.0.10 — no new setting. In Pro mode both sections appear exactly as before, with the same content and functions.
 
-            Installs over v1.0.9 normally (same release key, no uninstall needed).
+            Installs over v1.0.10 normally (same release key, no uninstall needed).
           files: app/build/outputs/apk/release/*.apk
