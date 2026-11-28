@@ -1,0 +1,93 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- v1.0.15: "Téléchargement de la mise à jour" dialog — approved mockup 3
+     (centred): download icon in a gradient circle straddling the top edge,
+     title, large circular progress ring (gold->cyan) with the percentage in
+     the middle, downloaded / total sizes, "Annuler" button. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical">
+
+    <ImageView
+        android:layout_width="56dp"
+        android:layout_height="56dp"
+        android:layout_gravity="center_horizontal"
+        android:layout_marginBottom="-28dp"
+        android:background="@drawable/bg_play_btn"
+        android:padding="14dp"
+        android:src="@drawable/ic_update"
+        android:tint="@color/zeno_on_gradient" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="@drawable/bg_update_dialog"
+        android:orientation="vertical"
+        android:padding="24dp"
+        android:paddingTop="40dp">
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center"
+            android:text="@string/update_downloading_title"
+            android:textColor="@color/zeno_ink"
+            android:textSize="20sp"
+            android:textStyle="bold" />
+
+        <FrameLayout
+            android:layout_width="160dp"
+            android:layout_height="160dp"
+            android:layout_gravity="center_horizontal"
+            android:layout_marginTop="20dp">
+
+            <ProgressBar
+                android:id="@+id/downloadRing"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:background="@drawable/progress_ring_track"
+                android:indeterminate="false"
+                android:max="100"
+                android:progress="0"
+                android:progressDrawable="@drawable/progress_ring" />
+
+            <TextView
+                android:id="@+id/downloadPercent"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center"
+                android:text="0%"
+                android:textColor="@color/zeno_ink"
+                android:textSize="30sp"
+                android:textStyle="bold" />
+
+        </FrameLayout>
+
+        <TextView
+            android:id="@+id/downloadSizes"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:gravity="center"
+            android:textColor="@color/zeno_ink2"
+            android:textSize="15sp" />
+
+        <TextView
+            android:id="@+id/downloadCancelBtn"
+            android:layout_width="wrap_content"
+            android:layout_height="48dp"
+            android:layout_gravity="center_horizontal"
+            android:layout_marginTop="20dp"
+            android:background="@drawable/bg_update_btn_outline"
+            android:gravity="center"
+            android:minWidth="180dp"
+            android:paddingStart="24dp"
+            android:paddingEnd="24dp"
+            android:text="@string/cancel"
+            android:textColor="@color/zeno_ink2"
+            android:textSize="16sp"
+            android:textStyle="bold" />
+
+    </LinearLayout>
+
+</LinearLayout>

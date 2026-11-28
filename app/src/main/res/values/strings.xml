@@ -47,6 +47,9 @@
     <string name="update_available_msg">Zeno Play %1$s est disponible. Voulez-vous l’installer maintenant ?</string>
     <string name="update_message">Zeno Play %1$s est disponible. Voulez-vous l’installer maintenant ?</string>
     <string name="update_install">Installer la mise à jour</string>
+    <string name="update_install_short">Installer</string>
+    <string name="update_available_title_short">Nouvelle mise à jour</string>
+    <string name="update_downloading_title">Téléchargement de la mise à jour</string>
     <string name="update_later">Plus tard</string>
     <string name="update_downloading">Téléchargement de la mise à jour %1$s…</string>
     <string name="update_none">Vous avez la dernière version</string>

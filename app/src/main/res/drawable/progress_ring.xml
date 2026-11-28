@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- v1.0.15: circular progress ring (gold->cyan) for the download dialog.
+     Used as the progressDrawable of a determinate circular ProgressBar
+     (useLevel makes the ring fill with the level). -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="ring"
+    android:innerRadius="64dp"
+    android:thickness="12dp"
+    android:useLevel="true">
+    <gradient
+        android:angle="135"
+        android:startColor="#FFD76A"
+        android:endColor="#2DE2E6"
+        android:type="linear" />
+</shape>

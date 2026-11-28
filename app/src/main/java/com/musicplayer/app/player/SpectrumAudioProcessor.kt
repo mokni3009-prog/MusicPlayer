@@ -51,7 +51,8 @@ class SpectrumAudioProcessor : BaseAudioProcessor() {
         // untouched for the pass-through copy below.
         val copy = inputBuffer.duplicate().order(ByteOrder.LITTLE_ENDIAN)
         if (channelCount > 0 &&
-            (encoding == C.ENCODING_PCM_16BIT || encoding == C.ENCODING_PCM_FLOAT)
+            (encoding == C.ENCODING_PCM_16BIT || encoding == C.ENCODING_PCM_FLOAT ||
+                encoding == C.ENCODING_PCM_24BIT || encoding == C.ENCODING_PCM_32BIT)
         ) {
             analyse(copy)
         }
@@ -82,6 +83,12 @@ class SpectrumAudioProcessor : BaseAudioProcessor() {
         val frameBytes = when (encoding) {
             C.ENCODING_PCM_16BIT -> 2 * channelCount
             C.ENCODING_PCM_FLOAT -> 4 * channelCount
+            // v1.0.15: 24-bit and 32-bit PCM were silently skipped (the
+            // guard in queueInput only allowed 16-bit/float), so on a
+            // decoder that outputs 24/32-bit PCM the waves saw nothing
+            // at all while the music played normally.
+            C.ENCODING_PCM_24BIT -> 3 * channelCount
+            C.ENCODING_PCM_32BIT -> 4 * channelCount
             else -> return
         }
         while (buffer.remaining() >= frameBytes && windowPos < FFT_SIZE) {
@@ -89,6 +96,8 @@ class SpectrumAudioProcessor : BaseAudioProcessor() {
             for (ch in 0 until channelCount) {
                 sum += when (encoding) {
                     C.ENCODING_PCM_16BIT -> buffer.short / 32768f
+                    C.ENCODING_PCM_24BIT -> read24Bit(buffer) / 8388608f
+                    C.ENCODING_PCM_32BIT -> buffer.int / 2147483648f
                     else -> buffer.float
                 }
             }
@@ -98,6 +107,16 @@ class SpectrumAudioProcessor : BaseAudioProcessor() {
                 windowPos = 0
             }
         }
+    }
+
+    /** One little-endian 24-bit sample as a signed int. */
+    private fun read24Bit(buffer: ByteBuffer): Int {
+        val b0 = buffer.get().toInt() and 0xFF
+        val b1 = buffer.get().toInt() and 0xFF
+        val b2 = buffer.get().toInt() and 0xFF
+        var value = b0 or (b1 shl 8) or (b2 shl 16)
+        if (value and 0x800000 != 0) value -= 0x1000000
+        return value
     }
 
     private fun publishSpectrum() {

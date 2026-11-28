@@ -558,6 +558,12 @@ class PlaybackService : MediaLibraryService() {
         old.removeListener(playerListener)
         session?.release()
         old.release()
+        // v1.0.15: the spectrum + gain processors are shared instances
+        // reused across player builds — reset them so no stale state
+        // (window, format, smoothed magnitudes) survives from the
+        // released player into the new one.
+        spectrumProcessor.reset()
+        gainProcessor.reset()
         releaseVisualizer()
         player = ExoPlayer.Builder(this)
             .setRenderersFactory(buildRenderersFactory())
@@ -565,6 +571,13 @@ class PlaybackService : MediaLibraryService() {
         gainStageActive = true
         val plain = player!!
         plain.addListener(playerListener)
+        // v1.0.15: the rebuilt player gets the same offload-disabled
+        // parameters as the normal build (see disableAudioOffload) — the
+        // rebuild used to skip them, so a rebuilt player could offload
+        // its audio to the DSP and the PCM would never reach the spectrum
+        // processor: the waves would silently die for the rest of the
+        // session.
+        disableAudioOffload(plain)
         // v1.0.9: re-attach EQ/Reverb/Visualizer to the NEW player's session
         // (see attachAudioEffects — the session callback never fires).
         attachAudioEffects()
@@ -583,6 +596,11 @@ class PlaybackService : MediaLibraryService() {
             plain.prepare()
             plain.play()
         }
+        // v1.0.15: the attach above runs before the player has an audio
+        // session id (it is generated when playback starts), so on a
+        // rebuilt player the Visualizer/EQ could stay unattached. Retry
+        // once playback has started.
+        mainHandler.postDelayed({ attachAudioEffects() }, 800)
         session = MediaLibrarySession.Builder(this, plain, sessionCallback)
             .build()
         mainHandler.post {
@@ -1366,18 +1384,12 @@ class PlaybackService : MediaLibraryService() {
         }
     }
 
-    private fun buildPlayerWithSpectrum() {
-        // Media3 1.4.1 has no ExoPlayer.Builder.setAudioProcessors: the audio
-        // processors are attached through a DefaultAudioSink built by a custom
-        // DefaultRenderersFactory.
-        player = ExoPlayer.Builder(this)
-            .setRenderersFactory(buildRenderersFactory())
-            .build()
-        gainStageActive = true
-        // Media3 1.4.1 has no ExoPlayer.Builder.setAudioOffloadPreferences:
-        // offload is disabled through the track selection parameters, so the
-        // PCM always flows through the in-app spectrum processor.
-        val exoPlayer = player!!
+    /** Audio offload must stay disabled so PCM always flows through the
+     *  in-app spectrum processor. Media3 1.4.1 has no
+     *  ExoPlayer.Builder.setAudioOffloadPreferences: offload is disabled
+     *  through the track selection parameters. Shared by the normal build
+     *  and the fallback rebuild (v1.0.15: the rebuild never applied it). */
+    private fun disableAudioOffload(exoPlayer: ExoPlayer) {
         exoPlayer.trackSelectionParameters = exoPlayer.trackSelectionParameters
             .buildUpon()
             .setAudioOffloadPreferences(
@@ -1388,6 +1400,17 @@ class PlaybackService : MediaLibraryService() {
                     .build()
             )
             .build()
+    }
+
+    private fun buildPlayerWithSpectrum() {
+        // Media3 1.4.1 has no ExoPlayer.Builder.setAudioProcessors: the audio
+        // processors are attached through a DefaultAudioSink built by a custom
+        // DefaultRenderersFactory.
+        player = ExoPlayer.Builder(this)
+            .setRenderersFactory(buildRenderersFactory())
+            .build()
+        gainStageActive = true
+        disableAudioOffload(player!!)
         player?.addListener(playerListener)
         session = MediaLibrarySession.Builder(this, player!!, sessionCallback)
             .build()

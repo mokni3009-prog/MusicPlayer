@@ -31,6 +31,21 @@ object UpdateChecker {
     private const val OWNER = "mokni3009-prog"
     private const val REPO = "MusicPlayer"
 
+    /** v1.0.15: set by the download dialog's "Annuler" button. The
+     *  download loop notices it, deletes the partial file and returns
+     *  null; the caller tells a user cancellation apart from a real
+     *  failure through this flag (a cancellation stays silent). */
+    @Volatile
+    var downloadCancelled = false
+
+    fun resetDownloadCancel() {
+        downloadCancelled = false
+    }
+
+    fun cancelDownload() {
+        downloadCancelled = true
+    }
+
     /** True when [latest] (e.g. "v1.0.3") is newer than [current] (e.g. "1.0.2"). */
     fun isNewer(latest: String, current: String): Boolean {
         val l = latest.trimStart('v', 'V').split(".").map { it.toIntOrNull() ?: 0 }
@@ -107,7 +122,7 @@ object UpdateChecker {
     suspend fun downloadApk(
         context: Context,
         url: String,
-        onProgress: (Int) -> Unit
+        onProgress: (downloadedBytes: Long, totalBytes: Long) -> Unit
     ): File? = withContext(Dispatchers.IO) {
         try {
             val conn = URL(url).openConnection() as HttpURLConnection
@@ -123,18 +138,30 @@ object UpdateChecker {
                 return@withContext null
             }
             val total = conn.contentLengthLong
+            if (downloadCancelled) return@withContext null
             val outFile = File(context.cacheDir, "zeno-play-update.apk")
             conn.inputStream.use { input ->
                 FileOutputStream(outFile).use { out ->
                     val buf = ByteArray(8192)
                     var read: Int
                     var downloaded = 0L
-                    while (input.read(buf).also { read = it } != -1) {
+                    while (!downloadCancelled &&
+                        input.read(buf).also { read = it } != -1
+                    ) {
                         out.write(buf, 0, read)
                         downloaded += read
-                        if (total > 0) onProgress(((downloaded * 100) / total).toInt())
+                        onProgress(downloaded, total)
                     }
                 }
+            }
+            if (downloadCancelled) {
+                // v1.0.15: the user pressed "Annuler" — drop the partial
+                // file so a later retry starts clean.
+                try {
+                    outFile.delete()
+                } catch (e: Exception) {
+                }
+                return@withContext null
             }
             outFile
         } catch (e: Exception) {

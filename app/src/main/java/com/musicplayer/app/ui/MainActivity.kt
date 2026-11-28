@@ -360,6 +360,8 @@ class MainActivity : FullScreenActivity() {
 
         buildTabs()
         alarmScreen = AlarmScreen(this, binding.alarmTab)
+        // v1.0.15: keep the alarm + FAB clear of the mini player.
+        alarmScreen.setMiniPlayerVisible(binding.miniPlayerBar.visibility == View.VISIBLE)
         buildFormatChips()
         wireSettings()
 
@@ -822,11 +824,15 @@ class MainActivity : FullScreenActivity() {
         val song = PlayerConnection.currentSong()
         if (song == null) {
             binding.miniPlayerBar.visibility = View.GONE
+            // v1.0.15: the alarm + FAB drops back down when no song is loaded.
+            if (::alarmScreen.isInitialized) alarmScreen.setMiniPlayerVisible(false)
             binding.notifTitle.text = getString(R.string.no_song)
             binding.notifArtist.text = ""
             return
         }
         binding.miniPlayerBar.visibility = View.VISIBLE
+        // v1.0.15: lift the alarm + FAB above the mini player.
+        if (::alarmScreen.isInitialized) alarmScreen.setMiniPlayerVisible(true)
         binding.miniTitle.text = song.title
         binding.miniTitle.isSelected = true
         binding.miniArtist.text = song.artist
@@ -1363,14 +1369,7 @@ class MainActivity : FullScreenActivity() {
                     }
                     return@launch
                 }
-                AlertDialog.Builder(this@MainActivity)
-                    .setTitle(getString(R.string.update_available_title, latest.versionName))
-                    .setMessage(getString(R.string.update_available_msg, latest.versionName))
-                    .setPositiveButton(getString(R.string.update_install)) { _, _ ->
-                        startUpdate(latest)
-                    }
-                    .setNegativeButton(getString(R.string.update_later), null)
-                    .show()
+                showUpdateAvailableDialog(latest)
             } catch (e: Exception) {
                 // The update dialog / flow must never crash the app.
                 ErrorReporter.log(
@@ -1387,6 +1386,29 @@ class MainActivity : FullScreenActivity() {
                 }
             }
         }
+    }
+
+    /** v1.0.15: the update prompt is a Zeno-identity centred dialog
+     *  (approved mockup 1) instead of the plain system AlertDialog.
+     *  Same behaviour: Installer starts the download, Plus tard dismisses.
+     *  The version badge is dynamic — never a hardcoded version. */
+    private fun showUpdateAvailableDialog(latest: ReleaseInfo) {
+        val dialog = android.app.Dialog(this)
+        val d = com.musicplayer.app.databinding.DialogUpdateAvailableBinding.inflate(
+            layoutInflater
+        )
+        dialog.setContentView(d.root)
+        dialog.window?.setBackgroundDrawableResource(android.R.color.transparent)
+        dialog.setCancelable(true)
+        d.updateVersionBadge.text = "v${latest.versionName}"
+        d.updateMessage.text =
+            getString(R.string.update_available_msg, latest.versionName)
+        d.updateInstallBtn.setOnClickListener {
+            dialog.dismiss()
+            startUpdate(latest)
+        }
+        d.updateLaterBtn.setOnClickListener { dialog.dismiss() }
+        dialog.show()
     }
 
     private fun startUpdate(release: ReleaseInfo) {
@@ -1409,28 +1431,52 @@ class MainActivity : FullScreenActivity() {
     private fun downloadAndInstall(release: ReleaseInfo) {
         if (updateInProgress) return
         updateInProgress = true
-        val progressBar = android.widget.ProgressBar(
-            this, null, android.R.attr.progressBarStyleHorizontal
-        ).apply {
-            max = 100
-            isIndeterminate = true
+        UpdateChecker.resetDownloadCancel()
+        // v1.0.15: the download is shown in a Zeno-identity centred dialog
+        // (approved mockup 3): circular gradient progress ring with the
+        // percentage in the middle, downloaded / total sizes, "Annuler".
+        val dialog = android.app.Dialog(this)
+        val d = com.musicplayer.app.databinding.DialogUpdateDownloadingBinding.inflate(
+            layoutInflater
+        )
+        dialog.setContentView(d.root)
+        dialog.window?.setBackgroundDrawableResource(android.R.color.transparent)
+        dialog.setCancelable(false)
+        dialog.setCanceledOnTouchOutside(false)
+        d.downloadCancelBtn.setOnClickListener {
+            UpdateChecker.cancelDownload()
+            // The download loop notices the flag, drops the partial file
+            // and returns null; the coroutine below then ends silently.
+            dialog.dismiss()
         }
-        val dialog = AlertDialog.Builder(this)
-            .setTitle(getString(R.string.update_downloading, release.versionName))
-            .setView(progressBar)
-            .setCancelable(false)
-            .create()
         dialog.show()
+        fun formatMo(bytes: Long): String =
+            String.format(java.util.Locale.FRANCE, "%.1f Mo", bytes / 1_000_000.0)
         lifecycleScope.launch {
-            val file = UpdateChecker.downloadApk(this@MainActivity, release.apkUrl) { progress ->
+            val file = UpdateChecker.downloadApk(
+                this@MainActivity, release.apkUrl
+            ) { downloaded, total ->
                 runOnUiThread {
-                    progressBar.isIndeterminate = false
-                    progressBar.progress = progress
+                    val percent = if (total > 0) {
+                        ((downloaded * 100) / total).toInt().coerceIn(0, 100)
+                    } else {
+                        0
+                    }
+                    d.downloadRing.progress = percent
+                    d.downloadPercent.text = "$percent%"
+                    d.downloadSizes.text = if (total > 0) {
+                        "${formatMo(downloaded)} / ${formatMo(total)}"
+                    } else {
+                        formatMo(downloaded)
+                    }
                 }
             }
             dialog.dismiss()
             updateInProgress = false
             if (file == null) {
+                // A user cancellation stays silent (no failure toast, no
+                // error report); a real failure is reported as before.
+                if (UpdateChecker.downloadCancelled) return@launch
                 ErrorReporter.log(
                     ErrorReporter.TYPE_UPDATE,
                     "Update download failed for ${release.tag}"

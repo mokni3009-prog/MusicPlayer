@@ -91,13 +91,16 @@ jobs:
       - name: Publish release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v1.0.14
-          name: Zeno Play v1.0.14
+          tag_name: v1.0.15
+          name: Zeno Play v1.0.15
           body: |
-            Zeno Play v1.0.14 — two bug fixes, no new features.
+            Zeno Play v1.0.15 — six fixes, no new features.
 
-            - FIX (notification buttons): the previous / play-pause / next buttons in the playback notification now work even when the app UI is closed. They used to go through the activity's MediaController, which dies with the activity — the buttons are now handled directly by the playback service (same as the X button), using the service's own player + VLC engine. Failures are now reported to the error server instead of failing silently.
-            - FIX (real 200% volume): the volume slider showed 200% but the sound stayed at 100% after any playback error. The fallback player rebuild used to build a plain player without the gain stage, so the boost gain was stored but never applied. The rebuild now uses the same spectrum + gain renderers factory as the normal player, so the 200% boost (+6 dB) survives any playback error. New self-test check "volume-boost" verifies it. Also fixed: cancelling the sleep timer mid-fade now restores full volume immediately (it used to stay lowered until the slider was moved).
+            - FIX (alarm + button): the ALARME tab said "touchez + pour en créer une" but there was no + button — the FAB sat behind the mini player whenever a song was loaded. It now floats above the mini player. And switching an enabled alarm off no longer makes it vanish from the screen (disabled alarms were hidden because only enabled ones were listed): off now only disables, the alarm stays in the list with its toggle off, and only the explicit delete action removes it.
+            - FIX (full-player background): the blurred album-cover background only covered the middle of the screen — embedded covers are often landscape pictures with black letterbox bars, and plain centerCrop kept those bars. The cover is now pre-rendered to the exact screen size (black bars trimmed, centre-cropped with a safety zoom, blurred in software so it also works below API 31), so the background covers the whole screen edge-to-edge.
+            - NEW (professional update dialogs, approved mockups): the plain system dialogs are replaced by Zeno-identity centred dialogs — "Nouvelle mise à jour" with the logo, title + gradient version badge and Installer / Plus tard buttons, and "Téléchargement de la mise à jour" with a circular gradient progress ring, percentage, downloaded / total sizes and an Annuler button (cancelling drops the partial file silently).
+            - FIX (waves): the self-test "waves" check failed on v1.0.14 — the spectrum path is hardened (24/32-bit PCM support in the spectrum processor, the fallback rebuild now keeps audio offload disabled and resets the shared processors, effects are re-attached after a rebuild) and the probe now measures where the audio actually is (the old probe always started at position 0, where many clips open with a second or two of digital silence; the bar itself is unchanged).
+            - FIX (self-test UI check): the check compared view bounds against the app-usable area, which excludes the navigation bar on Android 9, while the app runs force full-screen — the 5 root framework containers were always flagged. It now compares against the real screen size and skips window containers; the real checks (truncated text, clickable-but-disabled) are unchanged.
 
-            Installs over v1.0.13 normally (same release key, no uninstall needed).
+            Installs over v1.0.14 normally (same release key, no uninstall needed).
           files: app/build/outputs/apk/release/*.apk

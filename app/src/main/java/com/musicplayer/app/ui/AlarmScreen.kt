@@ -83,15 +83,29 @@ class AlarmScreen(
         handler.removeCallbacks(ticker)
     }
 
+    /** v1.0.15: the mini player overlays the bottom of the screen, so the +
+     *  FAB (bottom|end of the tab) was hidden behind it whenever a song was
+     *  loaded — the user could not create an alarm at all. Lift the FAB
+     *  above the mini player while it is visible. */
+    fun setMiniPlayerVisible(visible: Boolean) {
+        val params = binding.alarmFab.layoutParams as? ViewGroup.MarginLayoutParams
+            ?: return
+        val margin = dp(if (visible) 104 else 20)
+        if (params.bottomMargin != margin) {
+            params.bottomMargin = margin
+            binding.alarmFab.layoutParams = params
+        }
+    }
+
     /** Reload the alarms and redraw everything. */
     fun refresh() {
         val alarms = AlarmStore.load(activity)
         val now = System.currentTimeMillis()
         updateClock()
-        val next = AlarmStore.nextAlarm(alarms, now)
-        nextAlarm = next?.first
-        nextTriggerMs = next?.second ?: 0L
-        if (next == null) {
+        if (alarms.isEmpty()) {
+            // Truly no alarms: empty state (card + list hidden, hint shown).
+            nextAlarm = null
+            nextTriggerMs = 0L
             binding.alarmNextCard.visibility = View.GONE
             binding.alarmEmptyHint.visibility = View.VISIBLE
             binding.alarmUpcomingTitle.visibility = View.GONE
@@ -100,7 +114,28 @@ class AlarmScreen(
             adapter.submit(emptyList())
             return
         }
+        val next = AlarmStore.nextAlarm(alarms, now)
+        // Soonest first, so the list reads as "upcoming".
+        val sorted = alarms.sortedBy { AlarmStore.nextTriggerMillis(it, now) }
+        if (next == null) {
+            // v1.0.15: alarms exist but none is enabled. They used to
+            // vanish from the screen entirely (nextAlarm() only returns
+            // enabled alarms), so switching the only alarm off looked
+            // like a delete — with no way to switch it back on. Show the
+            // whole list with their toggles off instead.
+            nextAlarm = null
+            nextTriggerMs = 0L
+            binding.alarmNextCard.visibility = View.GONE
+            binding.alarmEmptyHint.visibility = View.GONE
+            binding.alarmUpcomingTitle.visibility = View.VISIBLE
+            binding.alarmList.visibility = View.VISIBLE
+            adapter.submit(sorted)
+            binding.alarmNoOtherHint.visibility = View.GONE
+            return
+        }
         val (alarm, trigger) = next
+        nextAlarm = alarm
+        nextTriggerMs = trigger
         binding.alarmNextCard.visibility = View.VISIBLE
         binding.alarmEmptyHint.visibility = View.GONE
         binding.alarmNextTime.text =
@@ -112,7 +147,7 @@ class AlarmScreen(
         binding.alarmNextToggle.setOnCheckedChangeListener { _, checked ->
             setEnabled(alarm, checked)
         }
-        val others = alarms.filter { it.id != alarm.id }
+        val others = sorted.filter { it.id != alarm.id }
         binding.alarmUpcomingTitle.visibility = View.VISIBLE
         binding.alarmList.visibility = View.VISIBLE
         adapter.submit(others)

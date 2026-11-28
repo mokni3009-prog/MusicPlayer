@@ -5,8 +5,6 @@ import android.animation.AnimatorListenerAdapter
 import android.animation.ObjectAnimator
 import android.content.ComponentName
 import android.content.res.ColorStateList
-import android.graphics.RenderEffect
-import android.graphics.Shader
 import android.hardware.Sensor
 import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
@@ -481,29 +479,135 @@ class PlayerActivity : FullScreenActivity() {
         updateDiscRotation()
     }
 
-    /** Blurred cover background behind the player (luxury option). */
+    /** Blurred cover background behind the player (luxury option).
+     *  v1.0.15: the background must cover the whole screen edge-to-edge.
+     *  It did not: an embedded cover is often a landscape picture with
+     *  black letterbox bars top and bottom, and plain centerCrop keeps
+     *  those bars — the coach's screenshot (720x1600) showed solid navy
+     *  bands of ~170px top and bottom. So the cover is now pre-rendered
+     *  to the exact screen size: black bars are trimmed, the picture is
+     *  centre-cropped to the screen with a small safety zoom, then
+     *  blurred in software (the old RenderEffect blur only existed on
+     *  API 31+ — on the coach's Android 9 phone there was no blur at
+     *  all). The result is set with FIT_XY: the bitmap is already
+     *  screen-sized, so it fills the screen by construction, whatever
+     *  the cover's aspect ratio is. */
     private fun applyBlurBackground(bitmap: android.graphics.Bitmap) {
         if (!LuxuryPrefs.blurEnabled(this)) {
             binding.playerBg.visibility = View.GONE
             binding.playerBgDim.visibility = View.GONE
             return
         }
-        binding.playerBg.setImageBitmap(bitmap)
-        val radius = when (LuxuryPrefs.blurStrength(this)) {
-            0 -> 10f
-            2 -> 28f
-            else -> 18f
+        val size = android.graphics.Point()
+        @Suppress("DEPRECATION")
+        val display = windowManager.defaultDisplay
+        display.getRealSize(size)
+        val screenW = size.x.coerceAtLeast(1)
+        val screenH = size.y.coerceAtLeast(1)
+        val blurFactor = when (LuxuryPrefs.blurStrength(this)) {
+            0 -> 6
+            2 -> 16
+            else -> 10
         }
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            try {
-                binding.playerBg.setRenderEffect(
-                    RenderEffect.createBlurEffect(radius, radius, Shader.TileMode.CLAMP)
-                )
-            } catch (e: Exception) {
-            }
+        val prepared = try {
+            val trimmed = trimBlackBars(bitmap)
+            val covered = coverToScreen(trimmed, screenW, screenH)
+            if (trimmed !== bitmap) trimmed.recycle()
+            val blurred = blurBitmap(covered, blurFactor)
+            if (blurred !== covered) covered.recycle()
+            blurred
+        } catch (e: Exception) {
+            null
+        }
+        if (prepared == null) {
+            // Fall back to the raw cover (old behaviour) rather than no background.
+            binding.playerBg.scaleType = android.widget.ImageView.ScaleType.CENTER_CROP
+            binding.playerBg.setImageBitmap(bitmap)
+        } else {
+            binding.playerBg.scaleType = android.widget.ImageView.ScaleType.FIT_XY
+            binding.playerBg.setImageBitmap(prepared)
         }
         binding.playerBg.visibility = View.VISIBLE
         binding.playerBgDim.visibility = View.VISIBLE
+    }
+
+    /** Trims near-black bars (letterbox / pillarbox) from a cover: rows
+     *  and columns whose sampled brightness is ~0 are cut, capped at 40%
+     *  per side, and the result must keep at least 30% of each dimension
+     *  (a genuinely dark cover is left alone). Returns the source
+     *  unchanged when nothing is worth trimming. */
+    private fun trimBlackBars(src: android.graphics.Bitmap): android.graphics.Bitmap {
+        val w = src.width
+        val h = src.height
+        fun brightness(p: Int): Int =
+            ((p shr 16 and 0xFF) + (p shr 8 and 0xFF) + (p and 0xFF)) / 3
+        fun rowDark(y: Int): Boolean {
+            var sum = 0L
+            var n = 0
+            var x = 0
+            while (x < w) {
+                sum += brightness(src.getPixel(x, y))
+                n++
+                x += 4
+            }
+            return n > 0 && sum / n < 10
+        }
+        fun colDark(x: Int): Boolean {
+            var sum = 0L
+            var n = 0
+            var y = 0
+            while (y < h) {
+                sum += brightness(src.getPixel(x, y))
+                n++
+                y += 4
+            }
+            return n > 0 && sum / n < 10
+        }
+        var top = 0
+        while (top < h * 4 / 10 && rowDark(top)) top++
+        var bottom = h - 1
+        while (bottom > top && bottom > h * 6 / 10 && rowDark(bottom)) bottom--
+        var left = 0
+        while (left < w * 4 / 10 && colDark(left)) left++
+        var right = w - 1
+        while (right > left && right > w * 6 / 10 && colDark(right)) right--
+        if (top == 0 && left == 0 && right == w - 1 && bottom == h - 1) return src
+        if (right - left + 1 < w * 3 / 10 || bottom - top + 1 < h * 3 / 10) return src
+        return android.graphics.Bitmap.createBitmap(
+            src, left, top, right - left + 1, bottom - top + 1
+        )
+    }
+
+    /** Scales + centre-crops [src] to exactly [sw]x[sh] with a 1.1x
+     *  safety zoom, so no edge of the source picture can peek through. */
+    private fun coverToScreen(
+        src: android.graphics.Bitmap, sw: Int, sh: Int
+    ): android.graphics.Bitmap {
+        val scale = maxOf(sw.toFloat() / src.width, sh.toFloat() / src.height) * 1.1f
+        val scaledW = (src.width * scale).toInt().coerceAtLeast(sw)
+        val scaledH = (src.height * scale).toInt().coerceAtLeast(sh)
+        val scaled = android.graphics.Bitmap.createScaledBitmap(src, scaledW, scaledH, true)
+        val out = android.graphics.Bitmap.createBitmap(
+            scaled, (scaledW - sw) / 2, (scaledH - sh) / 2, sw, sh
+        )
+        if (out !== scaled) scaled.recycle()
+        return out
+    }
+
+    /** Strong blur by downscaling then upscaling (bilinear): cheap, and
+     *  it works on every API level — unlike RenderEffect (API 31+ only).
+     *  The factor is the blur strength (bigger = softer). */
+    private fun blurBitmap(
+        src: android.graphics.Bitmap, factor: Int
+    ): android.graphics.Bitmap {
+        val smallW = (src.width / factor).coerceAtLeast(1)
+        val smallH = (src.height / factor).coerceAtLeast(1)
+        val small = android.graphics.Bitmap.createScaledBitmap(src, smallW, smallH, true)
+        val out = android.graphics.Bitmap.createScaledBitmap(
+            small, src.width, src.height, true
+        )
+        small.recycle()
+        return out
     }
 
     /** Gyroscope: the disc leans with the phone (luxury option). */

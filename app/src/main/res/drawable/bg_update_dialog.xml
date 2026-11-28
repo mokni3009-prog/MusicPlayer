@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- v1.0.15: professional update dialogs (approved mockups 1 + 3) — dark navy
+     rounded dialog with a thin gold->cyan gradient border + soft glow look.
+     A shape stroke cannot be a gradient, so the border is a layer-list:
+     gradient slab underneath, navy slab inset by 1.5dp on top. -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item>
+        <shape android:shape="rectangle">
+            <gradient
+                android:angle="135"
+                android:startColor="#FFD76A"
+                android:endColor="#2DE2E6"
+                android:type="linear" />
+            <corners android:radius="24dp" />
+        </shape>
+    </item>
+    <item
+        android:left="1.5dp"
+        android:top="1.5dp"
+        android:right="1.5dp"
+        android:bottom="1.5dp">
+        <shape android:shape="rectangle">
+            <solid android:color="#12264F" />
+            <corners android:radius="22dp" />
+        </shape>
+    </item>
+</layer-list>

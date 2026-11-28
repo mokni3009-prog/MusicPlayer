@@ -457,6 +457,19 @@ object SelfTest {
         VisualizerHub.addListener(listener)
         return try {
             PlayerConnection.playSongs(library, 0)
+            // v1.0.15: measure where the audio actually is. The probe used
+            // to start at position 0 — many tracks (notably video clips)
+            // open with a second or two of digital silence, so the probe
+            // heard nothing even though the spectrum path was healthy.
+            // That is what the v1.0.14 "waves" failure was: the new first
+            // song's silent opening, while the position still advanced.
+            // Seek to 30s when the track is long enough; the bar is
+            // unchanged (2s window, 0.02 threshold, live spectrum during
+            // real playback still required).
+            if (library[0].durationMs > 60_000) {
+                PlayerConnection.seekTo(30_000)
+                delay(300)
+            }
             val pos1 = PlayerConnection.currentPositionMs()
             delay(2000)
             val pos2 = PlayerConnection.currentPositionMs()
@@ -487,14 +500,34 @@ object SelfTest {
     private fun checkCurrentScreen(activity: Activity): CheckResult {
         return try {
             val root = activity.window.decorView
-            val displayMetrics = activity.resources.displayMetrics
-            val screenW = displayMetrics.widthPixels
-            val screenH = displayMetrics.heightPixels
+            // v1.0.15: compare against the REAL screen size, not the
+            // app-usable area. resources.displayMetrics excludes the
+            // navigation bar on Android 9, while the app runs force
+            // full-screen — so the 5 root framework containers (all at
+            // (0,0), full physical size) were always flagged by exactly
+            // the nav-bar height, even though nothing was wrong. The
+            // real checks (text truncated, clickable-but-disabled) are
+            // unchanged, and a view past the physical screen is still
+            // flagged.
+            val size = android.graphics.Point()
+            @Suppress("DEPRECATION")
+            val display = activity.windowManager.defaultDisplay
+            display.getRealSize(size)
+            val screenW = size.x
+            val screenH = size.y
             val issues = mutableListOf<String>()
             val loc = IntArray(2)
             fun walk(view: View) {
                 if (view.visibility != View.VISIBLE) return
-                if (view.width > 0 && view.height > 0) {
+                // Window scaffolding, never app content: check its
+                // children, but never flag the container itself. (With
+                // the real screen size the bounds check alone would pass
+                // them — this is belt and braces.)
+                val name = view.javaClass.simpleName
+                val isWindowContainer = name == "DecorView" ||
+                    name == "ContentFrameLayout" ||
+                    name == "FitWindowsLinearLayout"
+                if (!isWindowContainer && view.width > 0 && view.height > 0) {
                     view.getLocationOnScreen(loc)
                     if (loc[0] + view.width > screenW + 1 ||
                         loc[1] + view.height > screenH + 1
