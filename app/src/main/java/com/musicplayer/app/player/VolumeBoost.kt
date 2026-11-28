@@ -24,6 +24,7 @@ object VolumeBoost {
 
     /** Current UI volume, 0..200. */
     @Volatile
+    @set:JvmName("setVolumePercentValue")
     var volumePercent: Int = 80
 
     /** Stereo balance: -1.0 (full left) .. 0 (centre) .. +1.0 (full right). */
