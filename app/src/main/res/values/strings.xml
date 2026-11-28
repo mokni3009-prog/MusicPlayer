@@ -194,6 +194,8 @@
     <string name="ringtone_create">Créer la sonnerie</string>
     <string name="ringtone_created">Sonnerie créée — choisissez-la dans les paramètres de son du téléphone.</string>
     <string name="ringtone_failed">Impossible de créer la sonnerie pour ce fichier.</string>
+    <string name="ringtone_need_permission">Autorisation d\'écriture requise pour créer la sonnerie</string>
+    <string name="ringtone_format_unsupported">Ce format (%1$s) n'est pas pris en charge pour la découpe.</string>
     <string name="ringtone_set">Définir comme sonnerie par défaut</string>
     <string name="ab_repeat">Répéter A–B</string>
     <string name="ab_set_a">Définir A</string>

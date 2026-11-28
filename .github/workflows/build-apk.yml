@@ -91,12 +91,14 @@ jobs:
       - name: Publish release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v1.0.11
-          name: Zeno Play v1.0.11
+          tag_name: v1.0.12
+          name: Zeno Play v1.0.12
           body: |
-            Zeno Play v1.0.11 — the lyrics and queue sections now follow the Standard / Pro mode. No new features; the full player keeps everything, only the layout changes.
+            Zeno Play v1.0.12 — the bottom actions row follows the Standard / Pro mode, and the ringtone cutter is fixed. No new features.
 
-            - CHANGED (full player): the "Paroles" (lyrics) section and the "Suivant dans la file" (up next) section are now hidden in Standard mode and shown in Pro mode, with the same light fade + slide animation as the advanced tools row. They use the same saved mode and the same toggle as v1.0.10 — no new setting. In Pro mode both sections appear exactly as before, with the same content and functions.
+            - CHANGED (full player): the bottom actions row (add to playlist, equalizer, ringtone, tag editor) is now hidden in Standard mode and shown in Pro mode, with the same light fade + slide animation as the other Pro-only rows. Same saved mode, same toggle — nothing else changes.
+            - FIXED (ringtone cutter): creating a ringtone failed on Android 9 with a bare "Impossible de créer la sonnerie pour ce fichier." — the server received 7 identical reports: "Permission Denial: writing com.android.providers.media.MediaProvider". Root cause: writing a new entry to MediaStore needs WRITE_EXTERNAL_STORAGE, and this screen never requested it (the v1.0.9 tag-editor fix added the permission to the manifest and a just-in-time request for tag saves only). The cutter now requests the permission just in time, exactly like the tag editor; if it is denied, the screen says so clearly instead of failing silently.
+            - CHANGED (ringtone cutter): non-MP3 sources are now decoded and re-encoded to AAC (.m4a) for the selected range (MediaCodec + MediaMuxer) — a byte-range cut only works for MP3 and produced an unplayable file on other containers. Formats only the VLC engine can read (APE, DSD, WavPack, MPC, tracker, TAK…) cannot be cut on-device and now show a clear message naming the format instead of the generic failure. Half-written entries are rolled back so no broken ringtone stays in the library.
 
-            Installs over v1.0.10 normally (same release key, no uninstall needed).
+            Installs over v1.0.11 normally (same release key, no uninstall needed).
           files: app/build/outputs/apk/release/*.apk

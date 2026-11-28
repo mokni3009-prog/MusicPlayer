@@ -780,9 +780,10 @@ class PlayerActivity : FullScreenActivity() {
     }
 
     // ---- A-B repeat ----
-    /** Standard / Pro mode (v1.0.10, extended in v1.0.11). Pro reveals the
-     * advanced tools row (-10s, speed, A-B, play once) plus the lyrics and
-     * queue sections, with a light fade + slide; Standard hides them all.
+    /** Standard / Pro mode (v1.0.10, extended in v1.0.11 and v1.0.12).
+     * Pro reveals the advanced tools row (-10s, speed, A-B, play once)
+     * plus the bottom actions row, the lyrics section and the queue
+     * section, with a light fade + slide; Standard hides them all.
      * The toggle pill shows the current mode. Nothing else is touched:
      * every feature stays reachable, only the rows hide. */
     private fun applyPlayerMode(animate: Boolean) {
@@ -795,7 +796,12 @@ class PlayerActivity : FullScreenActivity() {
         binding.modeToggleButton.setTextColor(
             getColor(if (pro) R.color.zeno_on_gradient else R.color.zeno_ink)
         )
-        val modeSections = listOf(binding.toolsRow, binding.lyricsSection, binding.queueSection)
+        val modeSections = listOf(
+            binding.toolsRow,
+            binding.actionsRow,
+            binding.lyricsSection,
+            binding.queueSection
+        )
         if (animate) {
             if (pro) {
                 for (section in modeSections) {

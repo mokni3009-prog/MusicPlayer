@@ -504,8 +504,9 @@
                 android:textStyle="bold"
                 android:visibility="gone" />
 
-            <!-- Actions row -->
+            <!-- Actions row (Pro only — hidden in Standard mode, v1.0.12) -->
             <LinearLayout
+                android:id="@+id/actionsRow"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="16dp"
