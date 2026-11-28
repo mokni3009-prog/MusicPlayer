@@ -71,6 +71,24 @@ class AlarmRingingActivity : FullScreenActivity() {
                 startService(intent)
             }
         } catch (e: Exception) {
+            // v1.0.16 (M11): the old code swallowed this failure — the
+            // user pressed Stop, the screen closed, and the alarm kept
+            // ringing. Log it and stop the service directly as a
+            // fallback so playback halts even if the start failed.
+            com.musicplayer.app.report.ErrorReporter.log(
+                com.musicplayer.app.report.ErrorReporter.TYPE_ERROR,
+                "Alarm stop failed: ${e.message}",
+                e
+            )
+            try {
+                stopService(Intent(this, PlaybackService::class.java))
+            } catch (e2: Exception) {
+                com.musicplayer.app.report.ErrorReporter.log(
+                    com.musicplayer.app.report.ErrorReporter.TYPE_ERROR,
+                    "Alarm stop fallback failed: ${e2.message}",
+                    e2
+                )
+            }
         }
     }
 }

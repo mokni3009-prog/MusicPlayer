@@ -204,7 +204,6 @@ object AlarmStore {
     private fun migrateLegacy(context: Context) {
         val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         if (prefs.getBoolean(KEY_MIGRATED, false)) return
-        prefs.edit().putBoolean(KEY_MIGRATED, true).apply()
         try {
             val legacy = context.getSharedPreferences(LEGACY_PREFS, Context.MODE_PRIVATE)
             val enabled = legacy.getBoolean("enabled", false)
@@ -212,6 +211,10 @@ object AlarmStore {
             if (!enabled || songId < 0) {
                 // Nothing to migrate — still clear the old keys.
                 legacy.edit().clear().apply()
+                // v1.0.16 (m11): only mark migrated once the work is
+                // done — the old code marked it BEFORE doing anything,
+                // so a crash mid-migration lost the legacy alarm.
+                prefs.edit().putBoolean(KEY_MIGRATED, true).apply()
                 return
             }
             val hour = legacy.getInt("hour", 7)
@@ -249,13 +252,42 @@ object AlarmStore {
             }
             legacy.edit().clear().apply()
             AlarmScheduler.schedule(context, alarm)
+            // v1.0.16 (m11): mark migrated only after the work succeeded
+            // — a crash before this point retries on the next load.
+            prefs.edit().putBoolean(KEY_MIGRATED, true).apply()
         } catch (e: Exception) {
+            com.musicplayer.app.report.ErrorReporter.log(
+                com.musicplayer.app.report.ErrorReporter.TYPE_ERROR,
+                "Alarm legacy migration failed: ${e.message}",
+                e
+            )
         }
     }
 }
 
 /** Exact AlarmManager scheduling for one alarm. */
 object AlarmScheduler {
+
+    private const val PREFS_REQ = "zeno_alarm_req"
+    private const val KEY_NEXT_REQ = "next_request_code"
+
+    /**
+     * v1.0.16 (m12): a stable, collision-free PendingIntent request
+     * code per alarm, kept in SharedPreferences. The old code used
+     * alarm.id.hashCode() — two alarms could share a 32-bit hash, and
+     * FLAG_UPDATE_CURRENT would then make one alarm fire the other's id.
+     */
+    fun requestCodeFor(context: Context, alarmId: String): Int {
+        val prefs = context.getSharedPreferences(PREFS_REQ, Context.MODE_PRIVATE)
+        val existing = prefs.getInt(alarmId, -1)
+        if (existing >= 0) return existing
+        val next = prefs.getInt(KEY_NEXT_REQ, 1).coerceAtLeast(1)
+        prefs.edit()
+            .putInt(alarmId, next)
+            .putInt(KEY_NEXT_REQ, next + 1)
+            .apply()
+        return next
+    }
 
     fun pendingIntent(context: Context, alarm: MusicAlarm): PendingIntent {
         val intent = Intent(context, AlarmReceiver::class.java).apply {
@@ -264,7 +296,7 @@ object AlarmScheduler {
             putExtra(AlarmStore.EXTRA_SONG_ID, alarm.songId)
         }
         return PendingIntent.getBroadcast(
-            context, alarm.id.hashCode(), intent,
+            context, requestCodeFor(context, alarm.id), intent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
     }

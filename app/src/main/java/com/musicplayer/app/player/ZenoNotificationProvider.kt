@@ -106,6 +106,32 @@ class ZenoNotificationProvider(context: Context) : MediaNotification.Provider {
         return false
     }
 
+    /**
+     * Re-posts the notification with the current VLC / player state,
+     * without touching the player (v1.0.16 m20). The service calls this
+     * after a VLC state change: the ExoPlayer does not change then, so
+     * no player event refreshes the notification — the old code forced
+     * a refresh with a no-op seek to the current position, which could
+     * glitch playback. Same notification id as the manager uses, so
+     * this replaces the current notification in place.
+     */
+    fun refreshNow(session: MediaSession) {
+        try {
+            val song = PlayerConnection.currentSong() ?: return
+            val notification = buildNotification(session, song)
+            val manager = appContext.getSystemService(
+                android.content.Context.NOTIFICATION_SERVICE
+            ) as android.app.NotificationManager
+            manager.notify(
+                DefaultMediaNotificationProvider.DEFAULT_NOTIFICATION_ID,
+                notification
+            )
+        } catch (e: Exception) {
+            // A stale notification is not fatal; the next player event
+            // refreshes it.
+        }
+    }
+
     /** One notification for both engines, built from the current song. */
     private fun buildNotification(session: MediaSession, song: Song): Notification {
         val player = session.player

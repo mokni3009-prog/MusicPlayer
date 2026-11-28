@@ -28,7 +28,7 @@ import com.musicplayer.app.databinding.ActivitySplashBinding
  * - a light band sweeps across the logo every few seconds,
  * - the logo itself has a subtle size pulse (1.00 → 1.05).
  * The logo stays clear and readable at all times. The animation is purely
- * visual: it runs during the fixed 1400 ms splash and never delays the
+ * visual: it runs during the fixed 3000 ms splash and never delays the
  * move to the main screen.
  */
 class SplashActivity : FullScreenActivity() {

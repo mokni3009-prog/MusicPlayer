@@ -25,7 +25,16 @@ class AlarmReceiver : BroadcastReceiver() {
             return
         }
         val alarms = AlarmStore.load(context)
-        val alarm = alarms.firstOrNull { it.id == alarmId } ?: return
+        val alarm = alarms.firstOrNull { it.id == alarmId }
+        if (alarm == null) {
+            // v1.0.16 (m13): a firing alarm that is gone from the store
+            // used to vanish silently — log it so it is visible.
+            com.musicplayer.app.report.ErrorReporter.log(
+                com.musicplayer.app.report.ErrorReporter.TYPE_ERROR,
+                "Alarm fired but not found in store (id=$alarmId)"
+            )
+            return
+        }
         if (!alarm.enabled) return
         // Re-schedule / disable BEFORE firing, so a crash while ringing
         // can never lose the next occurrence.
@@ -52,6 +61,69 @@ class AlarmReceiver : BroadcastReceiver() {
                 context.startService(serviceIntent)
             }
         } catch (e: Exception) {
+            // v1.0.16 (m13): the old code swallowed this — the alarm
+            // fired, nothing rang, nobody knew. Log it and post a
+            // high-priority notification so the user at least sees the
+            // alarm went off (tapping it opens the alarm screen).
+            com.musicplayer.app.report.ErrorReporter.log(
+                com.musicplayer.app.report.ErrorReporter.TYPE_ERROR,
+                "Alarm service start failed: ${e.message}",
+                e
+            )
+            postMissedAlarmNotification(context, alarm.name, alarm.songTitle)
+        }
+    }
+
+    /** Fallback when the playback service cannot be started: a
+     * high-priority notification so a missed alarm is never silent. */
+    private fun postMissedAlarmNotification(
+        context: Context,
+        alarmName: String,
+        songTitle: String
+    ) {
+        try {
+            val manager =
+                context.getSystemService(Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                if (manager.getNotificationChannel(PlaybackService.ALARM_CHANNEL_ID) == null) {
+                    val channel = android.app.NotificationChannel(
+                        PlaybackService.ALARM_CHANNEL_ID,
+                        context.getString(R.string.alarm_channel_name),
+                        android.app.NotificationManager.IMPORTANCE_HIGH
+                    ).apply {
+                        description = context.getString(R.string.alarm_channel_desc)
+                    }
+                    manager.createNotificationChannel(channel)
+                }
+            }
+            val openIntent = Intent(context, AlarmActivity::class.java).apply {
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            }
+            val pending = android.app.PendingIntent.getActivity(
+                context, 2001, openIntent,
+                android.app.PendingIntent.FLAG_UPDATE_CURRENT or
+                    android.app.PendingIntent.FLAG_IMMUTABLE
+            )
+            val notification = androidx.core.app.NotificationCompat
+                .Builder(context, PlaybackService.ALARM_CHANNEL_ID)
+                .setSmallIcon(R.drawable.ic_alarm)
+                .setContentTitle(alarmName)
+                .setContentText(
+                    if (songTitle.isBlank()) context.getString(R.string.alarm_service_failed)
+                    else "$songTitle — ${context.getString(R.string.alarm_service_failed)}"
+                )
+                .setPriority(androidx.core.app.NotificationCompat.PRIORITY_HIGH)
+                .setCategory(androidx.core.app.NotificationCompat.CATEGORY_ALARM)
+                .setContentIntent(pending)
+                .setAutoCancel(true)
+                .build()
+            manager.notify(2001, notification)
+        } catch (e: Exception) {
+            com.musicplayer.app.report.ErrorReporter.log(
+                com.musicplayer.app.report.ErrorReporter.TYPE_ERROR,
+                "Missed-alarm notification failed: ${e.message}",
+                e
+            )
         }
     }
 
@@ -82,8 +154,24 @@ class AlarmReceiver : BroadcastReceiver() {
                     context.startService(serviceIntent)
                 }
             } catch (e: Exception) {
+                // v1.0.16 (m13): same as above — never fail silently.
+                com.musicplayer.app.report.ErrorReporter.log(
+                    com.musicplayer.app.report.ErrorReporter.TYPE_ERROR,
+                    "Legacy alarm service start failed: ${e.message}",
+                    e
+                )
+                postMissedAlarmNotification(
+                    context,
+                    context.getString(R.string.alarm_default_name),
+                    ""
+                )
             }
         } catch (e: Exception) {
+            com.musicplayer.app.report.ErrorReporter.log(
+                com.musicplayer.app.report.ErrorReporter.TYPE_ERROR,
+                "Legacy alarm fire failed: ${e.message}",
+                e
+            )
         }
     }
 }

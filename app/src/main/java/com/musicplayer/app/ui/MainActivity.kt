@@ -41,17 +41,21 @@ import com.musicplayer.app.BuildConfig
 import com.musicplayer.app.R
 import com.musicplayer.app.data.AlbumArtLoader
 import com.musicplayer.app.data.BackupManager
+import com.musicplayer.app.data.CoverFetcher
 import com.musicplayer.app.data.FavoritesStore
 import com.musicplayer.app.data.MusicRepository
 import com.musicplayer.app.data.PlaybackStateStore
 import com.musicplayer.app.data.Playlist
 import com.musicplayer.app.data.PlaylistStore
+import com.musicplayer.app.data.RatingStore
 import com.musicplayer.app.data.Song
 import com.musicplayer.app.data.TagEditor
 import com.musicplayer.app.databinding.ActivityMainBinding
 import com.musicplayer.app.player.LyricsManager
 import com.musicplayer.app.player.PlaybackService
 import com.musicplayer.app.player.PlayerConnection
+import com.musicplayer.app.player.SilenceSkip
+import com.musicplayer.app.player.VirtualizerManager
 import com.musicplayer.app.player.VolumeBoost
 import com.musicplayer.app.report.ErrorReporter
 import com.musicplayer.app.update.ReleaseInfo
@@ -87,7 +91,7 @@ class MainActivity : FullScreenActivity() {
 
     private sealed class Filter {
         object None : Filter()
-        data class Album(val name: String) : Filter()
+        data class Album(val name: String, val artist: String = "") : Filter()
         data class Artist(val name: String) : Filter()
         data class Folder(val name: String) : Filter()
         data class Playlist(val playlist: com.musicplayer.app.data.Playlist) : Filter()
@@ -96,7 +100,7 @@ class MainActivity : FullScreenActivity() {
     }
 
     private enum class SmartType {
-        ALL, MOST_PLAYED, RECENTLY_ADDED, RECENTLY_PLAYED
+        ALL, MOST_PLAYED, RECENTLY_ADDED, RECENTLY_PLAYED, TOP_RATED
     }
 
     private var allSongs: List<Song> = emptyList()
@@ -117,6 +121,11 @@ class MainActivity : FullScreenActivity() {
     private val handler = Handler(Looper.getMainLooper())
     private var controllerReady = false
     private var libraryReady = false
+
+    /** v1.0.16 (M5): generation of the last library load — a newer load
+     * invalidates an older one's results (loads run off the main thread
+     * and can finish out of order). */
+    private var libraryLoadGeneration = 0
     private var restoreDone = false
 
     private var updateCheckedThisLaunch = false
@@ -149,6 +158,18 @@ class MainActivity : FullScreenActivity() {
     ) { uri ->
         if (uri == null) return@registerForActivityResult
         try {
+            // v1.0.16 (m17): keep read access to the picked file after
+            // the activity / process dies — without this the Uri stops
+            // working and the picked song can never play again.
+            try {
+                contentResolver.takePersistableUriPermission(
+                    uri, Intent.FLAG_GRANT_READ_URI_PERMISSION
+                )
+            } catch (e: Exception) {
+                // Not all providers grant persistable permission
+                // (MediaStore Uris); the temporary grant still works
+                // for this session.
+            }
             var displayName: String? = null
             contentResolver.query(uri, null, null, null, null)?.use { cursor ->
                 val idx = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
@@ -517,7 +538,15 @@ class MainActivity : FullScreenActivity() {
         return if (Build.VERSION.SDK_INT >= 33) {
             arrayOf(
                 Manifest.permission.READ_MEDIA_AUDIO,
-                Manifest.permission.POST_NOTIFICATIONS
+                Manifest.permission.POST_NOTIFICATIONS,
+                // v1.0.16 (F9): car mode needs the car device's class
+                // (Android 12+ runtime permission).
+                Manifest.permission.BLUETOOTH_CONNECT
+            )
+        } else if (Build.VERSION.SDK_INT >= 31) {
+            arrayOf(
+                Manifest.permission.READ_EXTERNAL_STORAGE,
+                Manifest.permission.BLUETOOTH_CONNECT
             )
         } else {
             arrayOf(Manifest.permission.READ_EXTERNAL_STORAGE)
@@ -536,28 +565,48 @@ class MainActivity : FullScreenActivity() {
     }
 
     private fun loadSongs() {
-        // v1.0.3: a library-load failure must never kill the launch.
-        try {
-            allSongs = MusicRepository.loadSongs(this)
-            favorites = FavoritesStore.getFavorites(this)
-            playlists = PlaylistStore.load(this)
-        } catch (e: Exception) {
-            ErrorReporter.log(
-                ErrorReporter.TYPE_LIBRARY,
-                "Library load failed in MainActivity: ${e.message}",
-                e
-            )
-            allSongs = emptyList()
-        }
-        libraryReady = true
-        lastLibraryLoadMs = System.currentTimeMillis()
-        refreshContent()
-        tryRestore()
-        if (allSongs.isEmpty()) {
-            Toast.makeText(this, getString(R.string.no_music_files), Toast.LENGTH_LONG).show()
-        } else {
-            maybeShowBatteryDialog()
-        }
+        // v1.0.16 (M5): the MediaStore scan + favorites + playlists used
+        // to run on the main thread — a big library froze the launch.
+        // Load off the main thread; the generation token keeps a stale
+        // load from overwriting a newer one.
+        val generation = ++libraryLoadGeneration
+        Thread {
+            val loaded: List<Song>
+            val favs: Set<Long>
+            val pls: List<Playlist>
+            try {
+                loaded = MusicRepository.loadSongs(this)
+                favs = FavoritesStore.getFavorites(this)
+                pls = PlaylistStore.load(this)
+            } catch (e: Exception) {
+                // v1.0.3: a library-load failure must never kill the launch.
+                ErrorReporter.log(
+                    ErrorReporter.TYPE_LIBRARY,
+                    "Library load failed in MainActivity: ${e.message}",
+                    e
+                )
+                loaded = emptyList()
+                favs = emptySet()
+                pls = emptyList()
+            }
+            runOnUiThread {
+                if (generation != libraryLoadGeneration || isFinishing) return@runOnUiThread
+                allSongs = loaded
+                favorites = favs
+                playlists = pls
+                // v1.0.16 (M1): keep the queue loader's library in sync.
+                PlayerActivity.MusicRepositoryHolder.library = loaded
+                libraryReady = true
+                lastLibraryLoadMs = System.currentTimeMillis()
+                refreshContent()
+                tryRestore()
+                if (loaded.isEmpty()) {
+                    Toast.makeText(this, getString(R.string.no_music_files), Toast.LENGTH_LONG).show()
+                } else {
+                    maybeShowBatteryDialog()
+                }
+            }
+        }.start()
     }
 
     // ----- tabs -----
@@ -633,19 +682,35 @@ class MainActivity : FullScreenActivity() {
 
     private fun filteredSongs(): List<Song> {
         val q = searchQuery.trim()
+        // v1.0.16 (M6): the smart lists and the playlist id list were
+        // recomputed inside the filter lambda for EVERY song (O(n^2)) —
+        // compute them once here, as id sets.
+        val smartIds: Set<Long>? = when (val f = currentFilter) {
+            is Filter.Smart -> when (f.type) {
+                SmartType.ALL -> null
+                SmartType.MOST_PLAYED -> PlayerConnection.mostPlayed(this, allSongs).map { it.id }.toSet()
+                SmartType.RECENTLY_ADDED -> PlayerConnection.recentlyAdded(allSongs).map { it.id }.toSet()
+                SmartType.RECENTLY_PLAYED -> PlayerConnection.recentlyPlayed(this, allSongs).map { it.id }.toSet()
+                // v1.0.16 (F5): 4★ and up.
+                SmartType.TOP_RATED -> allSongs.filter {
+                    RatingStore.getRating(this, it.id) >= 4
+                }.map { it.id }.toSet()
+            }
+            else -> null
+        }
+        val playlistIds: Set<Long>? =
+            (currentFilter as? Filter.Playlist)?.playlist?.songIds?.toSet()
         return allSongs.filter { song ->
             val filterOk = when (val f = currentFilter) {
                 is Filter.None -> true
-                is Filter.Album -> song.album == f.name
+                // v1.0.16 (m19): match artist + album — two albums with
+                // the same name by different artists no longer merge.
+                is Filter.Album -> song.album == f.name &&
+                    (f.artist.isEmpty() || song.artist == f.artist)
                 is Filter.Artist -> song.artist == f.name
                 is Filter.Folder -> song.folder == f.name
-                is Filter.Playlist -> f.playlist.songIds.contains(song.id)
-                is Filter.Smart -> when (f.type) {
-                    SmartType.ALL -> true
-                    SmartType.MOST_PLAYED -> PlayerConnection.mostPlayed(this, allSongs).contains(song)
-                    SmartType.RECENTLY_ADDED -> PlayerConnection.recentlyAdded(allSongs).contains(song)
-                    SmartType.RECENTLY_PLAYED -> PlayerConnection.recentlyPlayed(this, allSongs).contains(song)
-                }
+                is Filter.Playlist -> playlistIds?.contains(song.id) == true
+                is Filter.Smart -> smartIds?.contains(song.id) ?: true
                 is Filter.Favorites -> favorites.contains(song.id)
             }
             val queryOk = q.isEmpty() || MusicRepository.matchesQuery(song, MusicRepository.normalizeForSearch(q))
@@ -672,7 +737,7 @@ class MainActivity : FullScreenActivity() {
                         title = album.name,
                         subtitle = "${album.artist} · ${getString(R.string.songs_count, album.songs.size)}",
                         card = true,
-                        tag = Filter.Album(album.name)
+                        tag = Filter.Album(album.name, album.artist)
                     )
                 }
                 groupAdapter.submitList(items)
@@ -709,6 +774,11 @@ class MainActivity : FullScreenActivity() {
                         "smart:played", getString(R.string.recently_played),
                         getString(R.string.smart_playlist_sub),
                         tag = Filter.Smart(SmartType.RECENTLY_PLAYED)
+                    ),
+                    GroupAdapter.GroupItem(
+                        "smart:top", getString(R.string.top_rated),
+                        getString(R.string.top_rated_sub),
+                        tag = Filter.Smart(SmartType.TOP_RATED)
                     ),
                     GroupAdapter.GroupItem(
                         "smart:fav", getString(R.string.filter_favorites),
@@ -759,6 +829,7 @@ class MainActivity : FullScreenActivity() {
                 SmartType.MOST_PLAYED -> getString(R.string.most_played)
                 SmartType.RECENTLY_ADDED -> getString(R.string.recently_added)
                 SmartType.RECENTLY_PLAYED -> getString(R.string.recently_played)
+                SmartType.TOP_RATED -> getString(R.string.top_rated)
             }
             is Filter.Favorites -> getString(R.string.filter_favorites)
         }
@@ -898,7 +969,9 @@ class MainActivity : FullScreenActivity() {
     private fun buildFormatChips() {
         val formats = listOf(
             "MP3", "AAC", "M4A", "FLAC", "WAV", "OGG", "OPUS",
-            "WMA", "AIFF", "ALAC", "AMR", "MIDI"
+            "WMA", "AIFF", "ALAC", "AMR"
+            // v1.0.16 (m18): MIDI removed — the chip listed it, but the
+            // app cannot play MIDI files at all.
         )
         val grid = binding.formatsGrid
         grid.removeAllViews()
@@ -957,6 +1030,51 @@ class MainActivity : FullScreenActivity() {
         binding.lyricsSwitch.isChecked = LyricsManager.isAutoFetchEnabled(this)
         binding.lyricsSwitch.setOnCheckedChangeListener { _, checked ->
             LyricsManager.setAutoFetchEnabled(this, checked)
+        }
+
+        // v1.0.16 (F2): skip silence + sensitivity.
+        binding.silenceSkipSwitch.isChecked = SilenceSkip.isEnabled(this)
+        binding.silenceSkipSwitch.setOnCheckedChangeListener { _, checked ->
+            SilenceSkip.setEnabled(this, checked)
+        }
+        refreshSilenceSensLabel()
+        binding.silenceSensBtn.setOnClickListener {
+            showThreeChoiceDialog(
+                R.string.silence_sensitivity,
+                listOf(
+                    R.string.sensitivity_low, R.string.sensitivity_medium,
+                    R.string.sensitivity_high
+                ),
+                SilenceSkip.sensitivity(this)
+            ) { SilenceSkip.setSensitivity(this, it); refreshSilenceSensLabel() }
+        }
+
+        // v1.0.16 (F3): 3D surround / Virtualizer + strength.
+        binding.virtualizerSwitch.isChecked = VirtualizerManager.isEnabled(this)
+        binding.virtualizerSwitch.setOnCheckedChangeListener { _, checked ->
+            VirtualizerManager.setEnabled(this, checked)
+        }
+        refreshVirtualizerLabel()
+        binding.virtualizerStrengthBtn.setOnClickListener {
+            showThreeChoiceDialog(
+                R.string.virtualizer_strength,
+                listOf(
+                    R.string.strength_light, R.string.strength_medium,
+                    R.string.strength_strong
+                ),
+                VirtualizerManager.strength(this)
+            ) { VirtualizerManager.setStrength(this, it); refreshVirtualizerLabel() }
+        }
+
+        // v1.0.16 (F4): auto-download of missing covers (on by default).
+        binding.coverDownloadSwitch.isChecked = CoverFetcher.isAutoDownloadEnabled(this)
+        binding.coverDownloadSwitch.setOnCheckedChangeListener { _, checked ->
+            CoverFetcher.setAutoDownloadEnabled(this, checked)
+        }
+
+        // v1.0.16 (F6): listening history.
+        binding.historyOpenBtn.setOnClickListener {
+            TransitionHelper.startActivity(this, HistoryActivity.intent(this))
         }
 
         binding.eqOpenBtn.setOnClickListener {
@@ -1114,6 +1232,28 @@ class MainActivity : FullScreenActivity() {
     private fun refreshWaveformLabel() {
         binding.waveformValue.text = getString(
             WaveformStyle.LABELS[WaveformStyle.current(this)]
+        )
+    }
+
+    /** v1.0.16 (F2): silence-skip sensitivity label (low / medium / high). */
+    private fun refreshSilenceSensLabel() {
+        binding.silenceSensBtn.text = getString(
+            when (SilenceSkip.sensitivity(this)) {
+                0 -> R.string.sensitivity_low
+                2 -> R.string.sensitivity_high
+                else -> R.string.sensitivity_medium
+            }
+        )
+    }
+
+    /** v1.0.16 (F3): virtualizer strength label (light / medium / strong). */
+    private fun refreshVirtualizerLabel() {
+        binding.virtualizerStrengthBtn.text = getString(
+            when (VirtualizerManager.strength(this)) {
+                0 -> R.string.strength_light
+                2 -> R.string.strength_strong
+                else -> R.string.strength_medium
+            }
         )
     }
 

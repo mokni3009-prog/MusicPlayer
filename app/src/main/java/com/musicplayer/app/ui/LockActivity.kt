@@ -26,6 +26,25 @@ import com.musicplayer.app.player.PlayerConnection
  */
 class LockActivity : FullScreenActivity() {
 
+    // v1.0.16 (m24): the seek bar used to be set once per track and
+    // then frozen — add a 1 s ticker so it follows playback.
+    private val seekHandler = android.os.Handler(android.os.Looper.getMainLooper())
+    private var seekTracking = false
+    private val seekTicker = object : Runnable {
+        override fun run() {
+            if (isFinishing || isDestroyed) return
+            val controller = PlayerConnection.controller
+            if (controller != null && !seekTracking) {
+                val duration = controller.duration.takeIf { it > 0 }
+                    ?: PlayerConnection.currentSong()?.durationMs ?: 0L
+                if (duration > 0) binding.seekBar.max = duration.toInt()
+                binding.seekBar.progress =
+                    controller.currentPosition.toInt().coerceIn(0, binding.seekBar.max)
+            }
+            seekHandler.postDelayed(this, 1000)
+        }
+    }
+
     private lateinit var binding: ActivityLockBinding
 
     private val playerListener = object : Player.Listener {
@@ -62,8 +81,13 @@ class LockActivity : FullScreenActivity() {
                 if (fromUser) PlayerConnection.seekTo(progress.toLong())
             }
 
-            override fun onStartTrackingTouch(seekBar: SeekBar?) {}
-            override fun onStopTrackingTouch(seekBar: SeekBar?) {}
+            override fun onStartTrackingTouch(seekBar: SeekBar?) {
+                seekTracking = true
+            }
+
+            override fun onStopTrackingTouch(seekBar: SeekBar?) {
+                seekTracking = false
+            }
         })
         binding.volumeBar.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
@@ -87,10 +111,12 @@ class LockActivity : FullScreenActivity() {
         super.onStart()
         PlayerConnection.addVolumeListener(volumeSyncListener)
         connectController()
+        seekHandler.post(seekTicker)
     }
 
     override fun onStop() {
         super.onStop()
+        seekHandler.removeCallbacks(seekTicker)
         PlayerConnection.removeVolumeListener(volumeSyncListener)
         PlayerConnection.controller?.removeListener(playerListener)
     }

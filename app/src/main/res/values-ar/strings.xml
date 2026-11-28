@@ -53,6 +53,7 @@
     <string name="update_error">تعذر التحقق من التحديث</string>
     <string name="update_download_failed">فشل التنزيل</string>
     <string name="update_install_failed">فشل التثبيت</string>
+    <string name="update_installed">تم تثبيت التحديث بنجاح</string>
     <string name="update_allow_install">اسمح بالتثبيت من هذا المصدر: فعّل «السماح من هذا المصدر» في الإعدادات.</string>
     <string name="added_next">ستُشغَّل بعدها</string>
     <string name="playback_error">تعذر تشغيل هذه الأغنية، محاولة جديدة…</string>
@@ -413,6 +414,8 @@
     <string name="alarm_channel_name">المنبهات</string>
     <string name="alarm_channel_desc">إشعارات المنبهات الموسيقية</string>
     <string name="alarm_ringing">منبه</string>
+    <string name="alarm_song_missing">«%1$s» موش موجودة — النغمة الافتراضية</string>
+    <string name="alarm_service_failed">المنبه رنّ، أما المشغل ما نجمش يبدا.</string>
     <string name="selftest_title">اختبار ذاتي</string>
     <string name="selftest_desc">يفحص كل خاصية والعرض، وبعد يبعث التقرير أوتوماتيكيًا.</string>
     <string name="selftest_run">شغّل الاختبار الذاتي</string>
@@ -446,4 +449,43 @@
     <string name="waveform_bubbles">فقاعات ذهبية</string>
     <string name="waveform_heart">قلب نابض</string>
     <string name="waveform_ripples">موجات مائية</string>
+
+    <!-- v1.0.16 -->
+    <string name="rating_star_1">نجمة واحدة</string>
+    <string name="rating_star_2">نجمتان</string>
+    <string name="rating_star_3">3 نجوم</string>
+    <string name="rating_star_4">4 نجوم</string>
+    <string name="rating_star_5">5 نجوم</string>
+    <string name="top_rated">الأعلى تقييمًا</string>
+    <string name="top_rated_sub">4 نجوم وأكثر</string>
+    <string name="history_title">سجل الاستماع</string>
+    <string name="history_clear">مسح</string>
+    <string name="history_empty">ما فماش حتى شيء توة — شغّل أغنية وستظهر هنا.</string>
+    <string name="history_cleared">تم مسح السجل</string>
+    <string name="history_song_missing">الأغنية هذه ما عادش موجودة في المكتبة</string>
+    <string name="open_history">سجل الاستماع</string>
+    <string name="unknown_title">عنوان غير معروف</string>
+    <string name="auto_dj">دي جي تلقائي</string>
+    <string name="auto_dj_on">الدي جي التلقائي مفعّل — الموسيقى تستمر وحدها</string>
+    <string name="auto_dj_off">الدي جي التلقائي مطفي</string>
+    <string name="voice_commands">أوامر صوتية</string>
+    <string name="voice_listening_title">أمر صوتي</string>
+    <string name="voice_listening_message">تكلم توة: «شغّل»، «وقّف»، «التالي»، «شغّل أغنية…»\n\nيتسمع كان الأمر متاعك من خدمة التعرف على الصوت متاع الهاتف — Zeno Play ما يسجل حتى شيء.</string>
+    <string name="voice_permission_title">الميكروفون</string>
+    <string name="voice_permission_message">الميكروفون يستعمل كان باش يسمع الأمر الصوتي متاعك («شغّل»، «التالي»…). Zeno Play ما يسجل حتى شيء.</string>
+    <string name="voice_permission_allow">سماح</string>
+    <string name="voice_permission_denied">تم رفض الميكروفون — الأوامر الصوتية مطفية</string>
+    <string name="voice_unavailable">التعرف على الصوت موش متوفر على هذا الهاتف</string>
+    <string name="voice_not_understood">ما فهمتش الأمر</string>
+    <string name="voice_not_understood_heard">ما فهمتش: «%1$s»</string>
+    <string name="voice_song_not_found">الأغنية موش موجودة: %1$s</string>
+    <string name="car_mode_on">وضع السيارة مفعّل</string>
+    <string name="car_mode_off">وضع السيارة مطفي</string>
+    <string name="settings_sound_title">الصوت</string>
+    <string name="silence_skip">تخطي الصمت</string>
+    <string name="silence_sensitivity">الحساسية</string>
+    <string name="virtualizer">صوت ثلاثي الأبعاد</string>
+    <string name="virtualizer_strength">قوة الصوت ثلاثي الأبعاد</string>
+    <string name="cover_auto_download">تحميل الأغلفة تلقائيًا</string>
+    <string name="cover_auto_download_desc">يحمّل تلقائيًا الغلاف الناقص (MusicBrainz / iTunes). يتحمّل كان صور الأغلفة — ما يتبعث حتى بيانات استماع.</string>
 </resources>

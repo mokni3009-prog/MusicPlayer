@@ -97,6 +97,24 @@
             android:paddingEnd="24dp"
             android:paddingBottom="24dp">
 
+            <!-- v1.0.16: car mode banner — shown only while the phone is
+                 connected to the car's Bluetooth. -->
+            <TextView
+                android:id="@+id/carModeBanner"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="2dp"
+                android:background="@drawable/bg_chip_selected"
+                android:paddingStart="14dp"
+                android:paddingTop="6dp"
+                android:paddingEnd="14dp"
+                android:paddingBottom="6dp"
+                android:text="@string/car_mode_on"
+                android:textColor="@color/zeno_on_gradient"
+                android:textSize="14sp"
+                android:textStyle="bold"
+                android:visibility="gone" />
+
             <!-- Circular smoke ring around the disc (gold->cyan mist,
                  driven by the real FFT; replaces the old straight bars). -->
             <FrameLayout
@@ -177,6 +195,62 @@
                 android:textColor="@color/zeno_ink2"
                 android:textSize="16sp"
                 android:textStyle="bold" />
+
+            <!-- v1.0.16: star rating (1–5) for the current song. -->
+            <LinearLayout
+                android:id="@+id/ratingRow"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center"
+                android:layout_marginTop="10dp"
+                android:orientation="horizontal">
+
+                <ImageButton
+                    android:id="@+id/star1"
+                    android:layout_width="34dp"
+                    android:layout_height="34dp"
+                    android:background="?attr/selectableItemBackgroundBorderless"
+                    android:contentDescription="@string/rating_star_1"
+                    android:src="@drawable/ic_star"
+                    android:tint="@color/zeno_ink3" />
+
+                <ImageButton
+                    android:id="@+id/star2"
+                    android:layout_width="34dp"
+                    android:layout_height="34dp"
+                    android:background="?attr/selectableItemBackgroundBorderless"
+                    android:contentDescription="@string/rating_star_2"
+                    android:src="@drawable/ic_star"
+                    android:tint="@color/zeno_ink3" />
+
+                <ImageButton
+                    android:id="@+id/star3"
+                    android:layout_width="34dp"
+                    android:layout_height="34dp"
+                    android:background="?attr/selectableItemBackgroundBorderless"
+                    android:contentDescription="@string/rating_star_3"
+                    android:src="@drawable/ic_star"
+                    android:tint="@color/zeno_ink3" />
+
+                <ImageButton
+                    android:id="@+id/star4"
+                    android:layout_width="34dp"
+                    android:layout_height="34dp"
+                    android:background="?attr/selectableItemBackgroundBorderless"
+                    android:contentDescription="@string/rating_star_4"
+                    android:src="@drawable/ic_star"
+                    android:tint="@color/zeno_ink3" />
+
+                <ImageButton
+                    android:id="@+id/star5"
+                    android:layout_width="34dp"
+                    android:layout_height="34dp"
+                    android:background="?attr/selectableItemBackgroundBorderless"
+                    android:contentDescription="@string/rating_star_5"
+                    android:src="@drawable/ic_star"
+                    android:tint="@color/zeno_ink3" />
+
+            </LinearLayout>
 
             <LinearLayout
                 android:layout_width="match_parent"
@@ -333,6 +407,16 @@
 
                 </FrameLayout>
 
+                <!-- v1.0.16: voice commands (Darija + MSA). -->
+                <ImageButton
+                    android:id="@+id/micButton"
+                    android:layout_width="48dp"
+                    android:layout_height="48dp"
+                    android:background="?attr/selectableItemBackgroundBorderless"
+                    android:contentDescription="@string/voice_commands"
+                    android:src="@drawable/ic_mic"
+                    android:tint="@color/zeno_ink2" />
+
             </LinearLayout>
 
             <!-- Tools row: -10s, speed, A-B, play once (Pro mode only) -->
@@ -438,6 +522,23 @@
                         android:textStyle="bold" />
 
                 </FrameLayout>
+
+                <!-- v1.0.16: Auto-DJ (Pro mode only) — the app keeps the
+                     music going by itself with similar songs. -->
+                <TextView
+                    android:id="@+id/autoDjButton"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="8dp"
+                    android:background="@drawable/bg_chip"
+                    android:paddingStart="12dp"
+                    android:paddingTop="8dp"
+                    android:paddingEnd="12dp"
+                    android:paddingBottom="8dp"
+                    android:text="@string/auto_dj"
+                    android:textColor="@color/zeno_ink"
+                    android:textSize="13sp"
+                    android:textStyle="bold" />
 
             </LinearLayout>
 

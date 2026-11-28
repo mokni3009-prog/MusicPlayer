@@ -4,7 +4,6 @@ import android.Manifest
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.media.MediaScannerConnection
 import android.os.Build
 import android.os.Bundle
 import android.provider.MediaStore
@@ -22,9 +21,6 @@ import com.musicplayer.app.databinding.ActivityTagEditBinding
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import org.jaudiotagger.audio.AudioFileIO
-import org.jaudiotagger.tag.FieldKey
-import java.io.File
 
 /**
  * Batch tag editor — title, artist, album, genre, year for one or several
@@ -54,14 +50,17 @@ class TagEditActivity : FullScreenActivity() {
 
     /** Pending save while a write-permission request is in flight. */
     private var pendingChanges: TagEditor.TagChanges? = null
-    private var pendingPaths: Map<Long, String> = emptyMap()
+
+    /** True once a write grant was already requested for this save, so a
+     * denied grant does not loop forever (v1.0.16 M3). */
+    private var permissionRetryDone = false
 
     /** Android 9 and below: WRITE_EXTERNAL_STORAGE, requested just in time. */
     private val writePermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { granted ->
         if (granted) {
-            pendingChanges?.let { doSave(it, pendingPaths) }
+            pendingChanges?.let { doSave(it) }
         } else {
             binding.saveButton.isEnabled = true
             binding.statusText.text = getString(R.string.tag_edit_need_permission)
@@ -74,7 +73,7 @@ class TagEditActivity : FullScreenActivity() {
         ActivityResultContracts.StartIntentSenderForResult()
     ) { result ->
         if (result.resultCode == RESULT_OK) {
-            pendingChanges?.let { doSave(it, pendingPaths) }
+            pendingChanges?.let { doSave(it) }
         } else {
             binding.saveButton.isEnabled = true
             binding.statusText.text = getString(R.string.tag_edit_need_permission)
@@ -119,22 +118,10 @@ class TagEditActivity : FullScreenActivity() {
 
     /** Reads the current tags of one song (for pre-fill). Null when unreadable. */
     private fun readTags(songId: Long): TagEditor.TagChanges? {
-        return try {
-            val paths = TagEditor.filePathsFor(this, listOf(songId))
-            val path = paths[songId] ?: return null
-            val file = File(path)
-            if (!file.exists()) return null
-            val tag = AudioFileIO.read(file).tag ?: return null
-            TagEditor.TagChanges(
-                title = tag.getFirst(FieldKey.TITLE).ifBlank { null },
-                artist = tag.getFirst(FieldKey.ARTIST).ifBlank { null },
-                album = tag.getFirst(FieldKey.ALBUM).ifBlank { null },
-                genre = tag.getFirst(FieldKey.GENRE).ifBlank { null },
-                year = tag.getFirst(FieldKey.YEAR).ifBlank { null }
-            )
-        } catch (e: Exception) {
-            null
-        }
+        val song = songs.find { it.id == songId } ?: return null
+        // v1.0.16 (M3): reads through the content Uri (temp file), not
+        // the MediaStore DATA column — works on Android 10+ too.
+        return TagEditor.readTags(this, song)
     }
 
     private fun save() {
@@ -149,77 +136,55 @@ class TagEditActivity : FullScreenActivity() {
         binding.saveButton.isEnabled = false
         binding.statusText.visibility = View.VISIBLE
         binding.statusText.text = getString(R.string.tag_edit_saving)
-        lifecycleScope.launch {
-            val paths = withContext(Dispatchers.IO) {
-                TagEditor.filePathsFor(this@TagEditActivity, songIds.toList())
-            }
-            // v1.0.9: on Android 9 the files are not writable without
-            // WRITE_EXTERNAL_STORAGE; on Android 10+ they need a MediaStore
-            // write request. Ask for write access BEFORE writing, or the
-            // save fails with a bare "Failed to edit tags".
-            val notWritable = withContext(Dispatchers.IO) {
-                songs.filter { song ->
-                    val p = paths[song.id]
-                    !p.isNullOrBlank() && !File(p).canWrite()
-                }
-            }
-            if (notWritable.isEmpty()) {
-                doSave(changes, paths)
-                return@launch
-            }
-            pendingChanges = changes
-            pendingPaths = paths
-            if (Build.VERSION.SDK_INT < 30) {
-                if (ContextCompat.checkSelfPermission(
-                        this@TagEditActivity,
-                        Manifest.permission.WRITE_EXTERNAL_STORAGE
-                    ) == PackageManager.PERMISSION_GRANTED
-                ) {
-                    // Permission already granted: the file itself is
-                    // read-only — run the save so the failure is logged.
-                    pendingChanges = null
-                    doSave(changes, paths)
-                } else {
-                    writePermissionLauncher.launch(Manifest.permission.WRITE_EXTERNAL_STORAGE)
-                }
-            } else {
-                try {
-                    val uris = notWritable.map { it.uri }
-                    val pi = MediaStore.createWriteRequest(contentResolver, uris)
-                    writeRequestLauncher.launch(
-                        IntentSenderRequest.Builder(pi.intentSender).build()
-                    )
-                } catch (e: Exception) {
-                    pendingChanges = null
-                    binding.saveButton.isEnabled = true
-                    binding.statusText.text = getString(R.string.tag_edit_need_permission)
-                }
-            }
-        }
+        pendingChanges = changes
+        permissionRetryDone = false
+        doSave(changes)
     }
 
-    /** Runs the actual tag write (after any write access was granted). */
-    private fun doSave(changes: TagEditor.TagChanges, paths: Map<Long, String>) {
+    /** Runs the actual tag write. On a missing write grant (v1.0.16 M3)
+     * the grant is requested once and the save retried. */
+    private fun doSave(changes: TagEditor.TagChanges) {
         lifecycleScope.launch {
             val result = withContext(Dispatchers.IO) {
-                TagEditor.applyTags(songs, paths, changes)
+                TagEditor.applyTags(this@TagEditActivity, songs, changes)
+            }
+            if (result.needsPermission && !permissionRetryDone) {
+                permissionRetryDone = true
+                pendingChanges = changes
+                if (Build.VERSION.SDK_INT < 30) {
+                    if (ContextCompat.checkSelfPermission(
+                            this@TagEditActivity,
+                            Manifest.permission.WRITE_EXTERNAL_STORAGE
+                        ) == PackageManager.PERMISSION_GRANTED
+                    ) {
+                        // Permission granted but the file is still not
+                        // writable — run the save so the failure is logged.
+                        pendingChanges = null
+                        doSave(changes)
+                    } else {
+                        writePermissionLauncher.launch(Manifest.permission.WRITE_EXTERNAL_STORAGE)
+                    }
+                } else {
+                    try {
+                        val uris = result.failedUris.ifEmpty { songs.map { it.uri } }
+                        val pi = MediaStore.createWriteRequest(contentResolver, uris)
+                        writeRequestLauncher.launch(
+                            IntentSenderRequest.Builder(pi.intentSender).build()
+                        )
+                    } catch (e: Exception) {
+                        pendingChanges = null
+                        binding.saveButton.isEnabled = true
+                        binding.statusText.text = getString(R.string.tag_edit_need_permission)
+                    }
+                }
+                return@launch
             }
             binding.saveButton.isEnabled = true
             when {
                 result.failed.isEmpty() -> {
-                    // Refresh MediaStore's cached tags, so the new title
-                    // shows in the library without restarting the app
-                    // (MainActivity also reloads on resume — see
-                    // TagEditor.lastSuccessfulEditMs).
-                    try {
-                        val files = paths.values.filter { it.isNotBlank() }.toTypedArray()
-                        if (files.isNotEmpty()) {
-                            MediaScannerConnection.scanFile(
-                                this@TagEditActivity, files, null, null
-                            )
-                        }
-                    } catch (e: Exception) {
-                    }
+                    // MediaStore's cached tags are updated by TagEditor
+                    // itself (contentResolver.update); MainActivity also
+                    // reloads on resume (TagEditor.lastSuccessfulEditMs).
                     Toast.makeText(
                         this@TagEditActivity,
                         getString(R.string.tag_edit_done, result.updated),

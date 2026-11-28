@@ -60,21 +60,30 @@ object UpdateChecker {
     }
 
     suspend fun fetchLatest(): ReleaseInfo? = withContext(Dispatchers.IO) {
+        // v1.0.16 (m3): the connection is disconnected in a finally and
+        // the stream closed via use {} — the old code leaked both.
+        var conn: HttpURLConnection? = null
         try {
             val url = URL("https://api.github.com/repos/$OWNER/$REPO/releases/latest")
-            val conn = url.openConnection() as HttpURLConnection
+            conn = url.openConnection() as HttpURLConnection
             conn.setRequestProperty("Accept", "application/vnd.github+json")
             conn.connectTimeout = 10000
             conn.readTimeout = 10000
             if (conn.responseCode != 200) {
                 Log.w(TAG, "releases API: ${conn.responseCode}")
-                ErrorReporter.log(
-                    ErrorReporter.TYPE_UPDATE,
-                    "Update check failed: GitHub releases API returned HTTP ${conn.responseCode}"
-                )
+                // v1.0.16 (m3): a 403 from the unauthenticated GitHub API
+                // is rate limiting, not an app bug — log it locally only,
+                // without an error report (the old code spammed the
+                // server with one report per check).
+                if (conn.responseCode != 403) {
+                    ErrorReporter.log(
+                        ErrorReporter.TYPE_UPDATE,
+                        "Update check failed: GitHub releases API returned HTTP ${conn.responseCode}"
+                    )
+                }
                 return@withContext null
             }
-            val json = JSONObject(conn.inputStream.bufferedReader().readText())
+            val json = JSONObject(conn.inputStream.bufferedReader().use { it.readText() })
             val tag = json.optString("tag_name", "")
             if (tag.isBlank()) return@withContext null
             val assets = json.optJSONArray("assets")
@@ -116,6 +125,11 @@ object UpdateChecker {
                 e
             )
             null
+        } finally {
+            try {
+                conn?.disconnect()
+            } catch (e: Exception) {
+            }
         }
     }
 
@@ -124,17 +138,23 @@ object UpdateChecker {
         url: String,
         onProgress: (downloadedBytes: Long, totalBytes: Long) -> Unit
     ): File? = withContext(Dispatchers.IO) {
+        // v1.0.16 (m3): disconnect in a finally; verify the downloaded
+        // size against Content-Length before returning the file.
+        var conn: HttpURLConnection? = null
         try {
-            val conn = URL(url).openConnection() as HttpURLConnection
+            conn = URL(url).openConnection() as HttpURLConnection
             conn.connectTimeout = 15000
             conn.readTimeout = 30000
             conn.setRequestProperty("Accept", "application/vnd.android.package-archive")
             if (conn.responseCode != 200) {
                 Log.w(TAG, "download: HTTP ${conn.responseCode}")
-                ErrorReporter.log(
-                    ErrorReporter.TYPE_UPDATE,
-                    "Update download failed: HTTP ${conn.responseCode}"
-                )
+                // v1.0.16 (m3): 403 is rate limiting — no error report.
+                if (conn.responseCode != 403) {
+                    ErrorReporter.log(
+                        ErrorReporter.TYPE_UPDATE,
+                        "Update download failed: HTTP ${conn.responseCode}"
+                    )
+                }
                 return@withContext null
             }
             val total = conn.contentLengthLong
@@ -144,19 +164,46 @@ object UpdateChecker {
                 FileOutputStream(outFile).use { out ->
                     val buf = ByteArray(8192)
                     var downloaded = 0L
+                    var lastPercent = -1
                     while (true) {
                         if (downloadCancelled) break
                         val read = input.read(buf)
                         if (read == -1) break
                         out.write(buf, 0, read)
                         downloaded += read
-                        onProgress(downloaded, total)
+                        // v1.0.16 (m16): progress used to be posted for
+                        // every 8 KB buffer (~8000 UI posts for a 65 MB
+                        // APK). Post only when the percent changes.
+                        if (total > 0) {
+                            val percent = ((downloaded * 100) / total).toInt()
+                            if (percent != lastPercent) {
+                                lastPercent = percent
+                                onProgress(downloaded, total)
+                            }
+                        } else if (downloaded % (1024 * 1024) < 8192) {
+                            onProgress(downloaded, total)
+                        }
                     }
+                    if (!downloadCancelled) onProgress(downloaded, total)
                 }
             }
             if (downloadCancelled) {
                 // v1.0.15: the user pressed "Annuler" — drop the partial
                 // file so a later retry starts clean.
+                try {
+                    outFile.delete()
+                } catch (e: Exception) {
+                }
+                return@withContext null
+            }
+            // v1.0.16 (m3): a truncated download must never be offered
+            // to the installer — verify the size first.
+            if (total > 0 && outFile.length() != total) {
+                Log.w(TAG, "download size mismatch: ${outFile.length()} != $total")
+                ErrorReporter.log(
+                    ErrorReporter.TYPE_UPDATE,
+                    "Update download incomplete: ${outFile.length()} of $total bytes"
+                )
                 try {
                     outFile.delete()
                 } catch (e: Exception) {
@@ -172,6 +219,11 @@ object UpdateChecker {
                 e
             )
             null
+        } finally {
+            try {
+                conn?.disconnect()
+            } catch (e: Exception) {
+            }
         }
     }
 

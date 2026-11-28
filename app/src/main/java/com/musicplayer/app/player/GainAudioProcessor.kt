@@ -22,6 +22,11 @@ import kotlin.math.tanh
  * rounded off with tanh, so the output never hard-clips.
  *
  * The audio passes through unchanged when both gains are 1.0.
+ *
+ * v1.0.16 (M13): 24-bit and 32-bit PCM (typical hi-res FLAC / WAV) used
+ * to pass through untouched — the slider honestly showed 200% while the
+ * sound stayed at 100%, and balance / Mono did nothing. Both formats
+ * are now processed like 16-bit / float.
  */
 class GainAudioProcessor : BaseAudioProcessor() {
 
@@ -42,6 +47,25 @@ class GainAudioProcessor : BaseAudioProcessor() {
         }
     }
 
+    /** One little-endian 24-bit sample as a signed int. */
+    private fun read24(buffer: ByteBuffer): Int {
+        val b0 = buffer.get().toInt() and 0xFF
+        val b1 = buffer.get().toInt() and 0xFF
+        val b2 = buffer.get().toInt() and 0xFF
+        var value = b0 or (b1 shl 8) or (b2 shl 16)
+        if (value and 0x800000 != 0) value -= 0x1000000
+        return value
+    }
+
+    /** One float sample (-1..1) as 3 little-endian bytes. */
+    private fun write24(out: ByteBuffer, v: Float) {
+        val i = (v.coerceIn(-1f, 0.9999999f) * 8388608f).toInt()
+            .coerceIn(-8388608, 8388607)
+        out.put((i and 0xFF).toByte())
+        out.put((i shr 8 and 0xFF).toByte())
+        out.put((i shr 16 and 0xFF).toByte())
+    }
+
     override fun onConfigure(
         inputAudioFormat: AudioProcessor.AudioFormat
     ): AudioProcessor.AudioFormat {
@@ -59,9 +83,11 @@ class GainAudioProcessor : BaseAudioProcessor() {
         val leftGain = gain * if (balance < 0f) 1f + balance else 1f
         val rightGain = gain * if (balance > 0f) 1f - balance else 1f
         val output = replaceOutputBuffer(inputBuffer.remaining())
+        // v1.0.16 (M13): 24/32-bit PCM no longer passes through untouched.
         if ((gain == 1.0f && balance == 0f && !mono) ||
             channelCount <= 0 ||
-            (encoding != C.ENCODING_PCM_16BIT && encoding != C.ENCODING_PCM_FLOAT)
+            (encoding != C.ENCODING_PCM_16BIT && encoding != C.ENCODING_PCM_FLOAT &&
+                encoding != C.ENCODING_PCM_24BIT && encoding != C.ENCODING_PCM_32BIT)
         ) {
             // No boost: pass through untouched.
             // (Same EMPTY_BUFFER trap as SpectrumAudioProcessor: skip the
@@ -96,6 +122,49 @@ class GainAudioProcessor : BaseAudioProcessor() {
                         val boosted = softLimit(sample * gain)
                         val out = (boosted * 32767f).toInt().coerceIn(-32768, 32767).toShort()
                         output.putShort(out)
+                    }
+                }
+            }
+        } else if (encoding == C.ENCODING_PCM_24BIT) {
+            // v1.0.16 (M13): 24-bit little-endian samples.
+            while (src.remaining() >= 3 * channelCount) {
+                if (stereo) {
+                    val l = read24(src) / 8388608f
+                    val r = read24(src) / 8388608f
+                    val (ol, orr) = if (mono) {
+                        val m = softLimit((l + r) * 0.5f * gain)
+                        m to m
+                    } else {
+                        softLimit(l * leftGain) to softLimit(r * rightGain)
+                    }
+                    write24(output, ol)
+                    write24(output, orr)
+                } else {
+                    while (src.remaining() >= 3) {
+                        val sample = read24(src) / 8388608f
+                        write24(output, softLimit(sample * gain))
+                    }
+                }
+            }
+        } else if (encoding == C.ENCODING_PCM_32BIT) {
+            // v1.0.16 (M13): 32-bit integer little-endian samples.
+            while (src.remaining() >= 4 * channelCount) {
+                if (stereo) {
+                    val l = src.int / 2147483648f
+                    val r = src.int / 2147483648f
+                    val (ol, orr) = if (mono) {
+                        val m = softLimit((l + r) * 0.5f * gain)
+                        m to m
+                    } else {
+                        softLimit(l * leftGain) to softLimit(r * rightGain)
+                    }
+                    output.putInt((ol * 2147483647f).toInt().coerceIn(-2147483648, 2147483647))
+                    output.putInt((orr * 2147483647f).toInt().coerceIn(-2147483648, 2147483647))
+                } else {
+                    while (src.remaining() >= 4) {
+                        val sample = src.int / 2147483648f
+                        val boosted = softLimit(sample * gain)
+                        output.putInt((boosted * 2147483647f).toInt().coerceIn(-2147483648, 2147483647))
                     }
                 }
             }

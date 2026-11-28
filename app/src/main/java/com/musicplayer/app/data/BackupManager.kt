@@ -30,7 +30,8 @@ object BackupManager {
         val favorites: Set<Long>,
         val queues: List<QueueStore.SavedQueue>,
         val volumePercent: Int,
-        val speed: Float
+        val speed: Float,
+        val ratings: Map<Long, Int> = emptyMap()
     )
 
     fun buildBackup(context: Context, library: List<Song>): BackupData {
@@ -48,7 +49,9 @@ object BackupManager {
             favorites,
             queues,
             PlaybackStateStore.loadVolume(context),
-            PlaybackStateStore.loadSpeed(context)
+            PlaybackStateStore.loadSpeed(context),
+            // v1.0.16 (F5): star ratings ride along with the backup.
+            RatingStore.getAll(context)
         )
     }
 
@@ -78,6 +81,10 @@ object BackupManager {
         val favs = JSONArray()
         for (id in backup.favorites) favs.put(id)
         obj.put("favorites", favs)
+        // v1.0.16 (F5): star ratings (song id → 1–5).
+        val ratings = JSONObject()
+        for ((id, stars) in backup.ratings) ratings.put(id.toString(), stars)
+        obj.put("ratings", ratings)
         val queues = JSONArray()
         for (q in backup.queues) {
             val qo = JSONObject()
@@ -151,6 +158,21 @@ object BackupManager {
                 )
             }
             if (queues.isNotEmpty()) QueueStore.save(context, queues)
+            // v1.0.16 (F5): star ratings — only for songs in the library.
+            val ratingsObj = obj.optJSONObject("ratings")
+            if (ratingsObj != null) {
+                val byId = library.associateBy { it.id }
+                val ratings = mutableMapOf<Long, Int>()
+                val keys = ratingsObj.keys()
+                while (keys.hasNext()) {
+                    val key = keys.next()
+                    val id = key.toLongOrNull() ?: continue
+                    if (id !in byId) continue
+                    val stars = ratingsObj.optInt(key, 0)
+                    if (stars in 1..5) ratings[id] = stars
+                }
+                if (ratings.isNotEmpty()) RatingStore.setAll(context, ratings)
+            }
             // Settings.
             PlaybackStateStore.saveVolume(context, obj.optInt("volumePercent", 80))
             PlaybackStateStore.saveSpeed(context, obj.optDouble("speed", 1.0).toFloat())
@@ -171,6 +193,48 @@ object BackupManager {
         val songs: Int,
         val error: String?
     )
+
+    /**
+     * v1.0.16 (C2): dry-run validation of a backup — parses the JSON and
+     * resolves the songs against [library] WITHOUT writing anything to
+     * disk. The self-test used to call [restore] directly, which saves
+     * playlists, favorites, queues, volume and speed — and
+     * FavoritesStore.setFavorites drops favorites for songs missing
+     * from the snapshot, so running the diagnostics could DELETE the
+     * user's favorites. The self-test now uses this instead.
+     */
+    fun validateDryRun(context: Context, jsonText: String, library: List<Song>): RestoreResult {
+        return try {
+            val obj = JSONObject(jsonText)
+            if (obj.optString("app", "") != "Zeno Play") {
+                return RestoreResult(false, 0, 0, "Invalid backup file")
+            }
+            val playlistsArr = obj.optJSONArray("playlists") ?: JSONArray()
+            var songsMatched = 0
+            for (i in 0 until playlistsArr.length()) {
+                val po = playlistsArr.getJSONObject(i)
+                val idsArr = po.optJSONArray("songIds") ?: JSONArray()
+                val ids = (0 until idsArr.length()).map { idsArr.getLong(it) }
+                songsMatched += resolveSongs(library, ids, po.optJSONArray("songs")).size
+            }
+            val favsArr = obj.optJSONArray("favorites") ?: JSONArray()
+            val favIds = (0 until favsArr.length()).map { favsArr.getLong(it) }
+            val favMatched = favIds.count { id -> library.any { it.id == id } }
+            // v1.0.16 (F5): ratings counted the same way (dry-run only).
+            val ratingsObj = obj.optJSONObject("ratings")
+            var ratingsMatched = 0
+            if (ratingsObj != null) {
+                val keys = ratingsObj.keys()
+                while (keys.hasNext()) {
+                    val id = keys.next().toLongOrNull() ?: continue
+                    if (library.any { it.id == id }) ratingsMatched++
+                }
+            }
+            RestoreResult(true, playlistsArr.length(), songsMatched + favMatched + ratingsMatched, null)
+        } catch (e: Exception) {
+            RestoreResult(false, 0, 0, e.message)
+        }
+    }
 
     private fun resolveSongs(
         library: List<Song>,

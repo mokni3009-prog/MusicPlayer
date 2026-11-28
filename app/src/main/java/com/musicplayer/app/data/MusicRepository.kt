@@ -81,7 +81,11 @@ object MusicRepository {
     ): List<Song> {
         val songs = mutableListOf<Song>()
         val uri = MediaStore.Audio.Media.EXTERNAL_CONTENT_URI
-        val selection = "${MediaStore.Audio.Media.IS_MUSIC} != 0"
+        // v1.0.16 (m5): IS_MUSIC is NULL (not 0) for some files on some
+        // devices — "IS_MUSIC != 0" excludes them (NULL != 0 is NULL,
+        // not true), so those songs never appeared in the library.
+        val selection = "(${MediaStore.Audio.Media.IS_MUSIC} != 0 OR " +
+            "${MediaStore.Audio.Media.IS_MUSIC} IS NULL)"
         val sortOrder = "${MediaStore.Audio.Media.TITLE} COLLATE NOCASE ASC"
         context.contentResolver.query(uri, projection, selection, null, sortOrder)?.use { cursor ->
             val idCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media._ID)

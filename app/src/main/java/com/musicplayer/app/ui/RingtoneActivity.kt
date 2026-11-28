@@ -220,16 +220,23 @@ class RingtoneActivity : FullScreenActivity() {
     }
 
     private fun cutAndSave(title: String): CutResult {
+        val song = MusicRepository.loadSongs(this).find { it.id == songId }
+            ?: return CutResult.Fail("song not found")
+        // v1.0.16 (M3): the source used to be resolved through the
+        // MediaStore DATA column — empty on Android 10+. Copy the
+        // content Uri to a temp file and cut that instead.
+        val ext = song.extension.ifEmpty { "mp3" }
+        val src = TagEditor.copyUriToTempFile(this, song.uri, ".$ext")
+            ?: return CutResult.Fail("cannot read file")
+        try {
+            return cutAndSaveFromFile(title, src, ext)
+        } finally {
+            src.delete()
+        }
+    }
+
+    private fun cutAndSaveFromFile(title: String, src: File, ext: String): CutResult {
         return try {
-            val song = MusicRepository.loadSongs(this).find { it.id == songId }
-                ?: return CutResult.Fail("song not found")
-            // Resolve the file path through MediaStore (may be empty on
-            // Android 10+ — those songs cannot be cut and are reported).
-            val path = TagEditor.filePathsFor(this, listOf(songId))[songId]
-                ?: return CutResult.Fail("file path unavailable")
-            val src = File(path)
-            if (!src.exists()) return CutResult.Fail("source file missing")
-            val ext = src.extension.ifEmpty { "mp3" }
             val isMp3 = ext.equals("mp3", ignoreCase = true)
             // A byte-range cut only works for MP3: on any other container
             // it produces a file without a header that no player can open.
@@ -290,7 +297,16 @@ class RingtoneActivity : FullScreenActivity() {
 
         contentResolver.openOutputStream(uri)?.use { out ->
             FileInputStream(src).use { input ->
-                input.skip(startByte)
+                // v1.0.16 (m8): InputStream.skip() is not guaranteed to
+                // skip the full amount — loop until the start offset is
+                // reached, or fail loudly instead of cutting from the
+                // wrong position.
+                var toSkip = startByte
+                while (toSkip > 0) {
+                    val skipped = input.skip(toSkip)
+                    if (skipped <= 0) throw IllegalStateException("cannot seek in source file")
+                    toSkip -= skipped
+                }
                 var remaining = endByte - startByte
                 val buffer = ByteArray(8192)
                 while (remaining > 0) {
@@ -388,12 +404,19 @@ class RingtoneActivity : FullScreenActivity() {
                     val bufferInfo = MediaCodec.BufferInfo()
                     val deadlineMs = System.currentTimeMillis() + 120_000L
                     while (!encoderEos && System.currentTimeMillis() < deadlineMs) {
+                        // v1.0.16 (m9): when neither codec makes progress
+                        // in an iteration, sleep briefly instead of
+                        // busy-spinning on 10 ms dequeue timeouts.
+                        var progressed = false
                         // Feed the decoder (or the encoder directly for PCM).
                         if (!decoderEos) {
                             if (needsDecoder) {
                                 val inIndex = decoder!!.dequeueInputBuffer(10_000)
                                 if (inIndex >= 0) {
-                                    val buf = decoder.getInputBuffer(inIndex)!!
+                                    // v1.0.16 (m9): getInputBuffer can
+                                    // return null (codec error state) —
+                                    // the old !! crashed the cut.
+                                    val buf = decoder.getInputBuffer(inIndex) ?: continue
                                     val size = extractor.readSampleData(buf, 0)
                                     if (size < 0 || extractor.sampleTime < 0 ||
                                         extractor.sampleTime > endUs
@@ -409,11 +432,12 @@ class RingtoneActivity : FullScreenActivity() {
                                         )
                                         extractor.advance()
                                     }
+                                    progressed = true
                                 }
                             } else {
                                 val inIndex = encoder.dequeueInputBuffer(10_000)
                                 if (inIndex >= 0) {
-                                    val buf = encoder.getInputBuffer(inIndex)!!
+                                    val buf = encoder.getInputBuffer(inIndex) ?: continue
                                     val size = extractor.readSampleData(buf, 0)
                                     if (size < 0 || extractor.sampleTime < 0 ||
                                         extractor.sampleTime > endUs
@@ -429,6 +453,7 @@ class RingtoneActivity : FullScreenActivity() {
                                         )
                                         extractor.advance()
                                     }
+                                    progressed = true
                                 }
                             }
                         }
@@ -440,16 +465,19 @@ class RingtoneActivity : FullScreenActivity() {
                                 if (bufferInfo.size > 0 && outBuf != null) {
                                     val inIndex = encoder.dequeueInputBuffer(10_000)
                                     if (inIndex >= 0) {
-                                        val inBuf = encoder.getInputBuffer(inIndex)!!
-                                        inBuf.clear()
-                                        val chunk = outBuf.duplicate()
-                                        chunk.position(bufferInfo.offset)
-                                        chunk.limit(bufferInfo.offset + bufferInfo.size)
-                                        inBuf.put(chunk)
-                                        encoder.queueInputBuffer(
-                                            inIndex, 0, bufferInfo.size,
-                                            bufferInfo.presentationTimeUs, 0
-                                        )
+                                        // v1.0.16 (m9): null guard (see above).
+                                        val inBuf = encoder.getInputBuffer(inIndex)
+                                        if (inBuf != null) {
+                                            inBuf.clear()
+                                            val chunk = outBuf.duplicate()
+                                            chunk.position(bufferInfo.offset)
+                                            chunk.limit(bufferInfo.offset + bufferInfo.size)
+                                            inBuf.put(chunk)
+                                            encoder.queueInputBuffer(
+                                                inIndex, 0, bufferInfo.size,
+                                                bufferInfo.presentationTimeUs, 0
+                                            )
+                                        }
                                     }
                                 }
                                 if (bufferInfo.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM != 0) {
@@ -462,6 +490,7 @@ class RingtoneActivity : FullScreenActivity() {
                                     }
                                 }
                                 decoder.releaseOutputBuffer(outIndex, false)
+                                progressed = true
                             }
                         }
                         // Drain the encoder into the muxer.
@@ -474,6 +503,7 @@ class RingtoneActivity : FullScreenActivity() {
                                     muxerStarted = true
                                     sawEncoderFormat = true
                                 }
+                                progressed = true
                             }
                             encIndex >= 0 -> {
                                 val outBuf = encoder.getOutputBuffer(encIndex)
@@ -488,8 +518,10 @@ class RingtoneActivity : FullScreenActivity() {
                                     encoderEos = true
                                 }
                                 encoder.releaseOutputBuffer(encIndex, false)
+                                progressed = true
                             }
                         }
+                        if (!progressed) Thread.sleep(5)
                     }
                     if (!encoderEos) throw IllegalStateException("transcode timed out")
                     if (!muxerStarted) throw IllegalStateException("no audio encoded")

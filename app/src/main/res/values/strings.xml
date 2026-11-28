@@ -56,6 +56,7 @@
     <string name="update_error">Impossible de vérifier la mise à jour</string>
     <string name="update_download_failed">Échec du téléchargement</string>
     <string name="update_install_failed">Échec de l’installation</string>
+    <string name="update_installed">Mise à jour installée avec succès</string>
     <string name="update_allow_install">Autorisez l’installation depuis cette source : activez « Autoriser depuis cette source » dans les paramètres.</string>
     <string name="added_next">Sera lue ensuite</string>
     <string name="playback_error">Impossible de lire cette chanson, nouvel essai…</string>
@@ -418,6 +419,8 @@
     <string name="alarm_channel_name">Alarmes</string>
     <string name="alarm_channel_desc">Notifications des alarmes musicales</string>
     <string name="alarm_ringing">Alarme</string>
+    <string name="alarm_song_missing">« %1$s » introuvable — sonnerie par défaut</string>
+    <string name="alarm_service_failed">L’alarme a sonné, mais le lecteur n’a pas pu démarrer.</string>
     <string name="selftest_title">Auto-test</string>
     <string name="selftest_desc">Vérifie chaque fonction et l\'affichage, puis envoie le rapport automatiquement.</string>
     <string name="selftest_run">Lancer l\'auto-test</string>
@@ -451,4 +454,43 @@
     <string name="waveform_bubbles">Bulles dorées</string>
     <string name="waveform_heart">Cœur battant</string>
     <string name="waveform_ripples">Ondes d’eau</string>
+
+    <!-- v1.0.16 -->
+    <string name="rating_star_1">1 étoile</string>
+    <string name="rating_star_2">2 étoiles</string>
+    <string name="rating_star_3">3 étoiles</string>
+    <string name="rating_star_4">4 étoiles</string>
+    <string name="rating_star_5">5 étoiles</string>
+    <string name="top_rated">Les mieux notées</string>
+    <string name="top_rated_sub">4 étoiles et plus</string>
+    <string name="history_title">Historique d\'écoute</string>
+    <string name="history_clear">Effacer</string>
+    <string name="history_empty">Rien pour le moment — lancez une chanson et elle apparaîtra ici.</string>
+    <string name="history_cleared">Historique effacé</string>
+    <string name="history_song_missing">Cette chanson n\'est plus dans la bibliothèque</string>
+    <string name="open_history">Historique d\'écoute</string>
+    <string name="unknown_title">Titre inconnu</string>
+    <string name="auto_dj">Auto-DJ</string>
+    <string name="auto_dj_on">Auto-DJ activé — la musique continue toute seule</string>
+    <string name="auto_dj_off">Auto-DJ désactivé</string>
+    <string name="voice_commands">Commandes vocales</string>
+    <string name="voice_listening_title">Commande vocale</string>
+    <string name="voice_listening_message">Parlez maintenant : « شغّل »، « وقّف »، « التالي »، « شغّل أغنية… »\n\nSeule votre commande est envoyée au service de reconnaissance de votre téléphone — Zeno Play n\'enregistre rien.</string>
+    <string name="voice_permission_title">Microphone</string>
+    <string name="voice_permission_message">Le microphone sert uniquement à écouter votre commande vocale (« شغّل »، « التالي »…). Rien n\'est enregistré par Zeno Play.</string>
+    <string name="voice_permission_allow">Autoriser</string>
+    <string name="voice_permission_denied">Microphone refusé — les commandes vocales sont désactivées</string>
+    <string name="voice_unavailable">Reconnaissance vocale indisponible sur ce téléphone</string>
+    <string name="voice_not_understood">Je n\'ai pas compris la commande</string>
+    <string name="voice_not_understood_heard">Je n\'ai pas compris : « %1$s »</string>
+    <string name="voice_song_not_found">Chanson introuvable : %1$s</string>
+    <string name="car_mode_on">Mode voiture activé</string>
+    <string name="car_mode_off">Mode voiture désactivé</string>
+    <string name="settings_sound_title">Son</string>
+    <string name="silence_skip">Sauter les silences</string>
+    <string name="silence_sensitivity">Sensibilité</string>
+    <string name="virtualizer">Son 3D (Virtualizer)</string>
+    <string name="virtualizer_strength">Intensité 3D</string>
+    <string name="cover_auto_download">Pochettes auto</string>
+    <string name="cover_auto_download_desc">Télécharge automatiquement la pochette manquante (MusicBrainz / iTunes). Seules les images sont récupérées — aucune donnée d\'écoute n\'est envoyée.</string>
 </resources>

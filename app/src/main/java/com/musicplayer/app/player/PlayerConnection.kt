@@ -121,6 +121,23 @@ object PlayerConnection {
         abEndMs = 0L
     }
 
+    /** Keep [songs] in sync with the controller's timeline after a
+     * drag-reorder in the queue UI (v1.0.16 M2). Without this, the next
+     * refresh rebuilds the upcoming list from the stale order and the
+     * drag appears to revert. */
+    fun moveSong(from: Int, to: Int) {
+        if (from !in songs.indices || to !in songs.indices) return
+        val mutable = songs.toMutableList()
+        Collections.swap(mutable, from, to)
+        songs = mutable
+    }
+
+    /** Keep [songs] in sync after a swipe-remove in the queue UI (M2). */
+    fun removeSongAt(index: Int) {
+        if (index !in songs.indices) return
+        songs = songs.toMutableList().also { it.removeAt(index) }
+    }
+
     /** "Play once then next": stop after the current track instead of repeating. */
     @Volatile
     var playOnceThenNext: Boolean = false
@@ -147,9 +164,14 @@ object PlayerConnection {
             pendingPlay = songs to index
             return
         }
+        // v1.0.16 (C1): a stored index can be stale after songs were
+        // deleted — ExoPlayer.setMediaItems throws on an out-of-range
+        // index on the main thread and crashes the app.
+        if (songs.isEmpty()) return
+        val safeIndex = index.coerceIn(0, songs.size - 1)
         this.songs = songs
         clearAB()
-        c.setMediaItems(songs.map { toMediaItem(it) }, index, 0)
+        c.setMediaItems(songs.map { toMediaItem(it) }, safeIndex, 0)
         c.prepare()
         c.play()
     }

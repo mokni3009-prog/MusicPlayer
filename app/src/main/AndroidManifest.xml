@@ -2,6 +2,9 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- v1.0.16 (F8): voice commands — asked just-in-time, only when
+         the user taps the microphone. -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
@@ -21,6 +24,10 @@
     <!-- v1.0.13: full-screen intent for the ringing screen (Android 14+). -->
     <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <!-- v1.0.16 (F9): car mode — detect the car's Bluetooth audio.
+         BLUETOOTH_CONNECT is a runtime permission on Android 12+. -->
+    <uses-permission android:name="android.permission.BLUETOOTH" />
+    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
 
     <!-- Android TV: leanback is optional (same APK also runs on phones/tablets),
          touchscreen is optional (TV has no touchscreen). -->
@@ -78,16 +85,16 @@
             android:parentActivityName=".ui.MainActivity" />
 
         <activity
-            android:name=".ui.SettingsActivity"
+            android:name=".ui.EqActivity"
             android:exported="false"
             android:screenOrientation="portrait"
             android:parentActivityName=".ui.MainActivity" />
 
         <activity
-            android:name=".ui.EqActivity"
+            android:name=".ui.HistoryActivity"
             android:exported="false"
             android:screenOrientation="portrait"
-            android:parentActivityName=".ui.SettingsActivity" />
+            android:parentActivityName=".ui.MainActivity" />
 
         <activity
             android:name=".ui.TagEditActivity"
@@ -159,6 +166,14 @@
         <receiver
             android:name=".update.UpdateInstallReceiver"
             android:exported="false" />
+
+        <receiver
+            android:name=".player.CarModeReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.bluetooth.a2dp.profile.action.CONNECTION_STATE_CHANGED" />
+            </intent-filter>
+        </receiver>
 
         <receiver
             android:name=".player.VlcActionReceiver"

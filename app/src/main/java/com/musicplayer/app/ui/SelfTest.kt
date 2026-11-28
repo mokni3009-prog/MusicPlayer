@@ -256,16 +256,25 @@ object SelfTest {
             results += CheckResult("updater", Status.FAIL, e.message ?: "error")
         }
 
-        // ---- Backup round-trip (in memory — nothing written to disk) ----
+        // ---- Backup round-trip (dry-run — nothing written to disk) ----
+        // v1.0.16 (C2): the old code called BackupManager.restore() here,
+        // which WRITES playlists, favorites, queues, volume and speed to
+        // disk — running the diagnostics could delete the user's
+        // favorites. validateDryRun parses + resolves only.
         onProgress("backup")
         try {
             val backup = BackupManager.buildBackup(context, library)
             val json = BackupManager.serialize(backup)
-            val restored = BackupManager.restore(context, json, library)
-            results += CheckResult(
-                "backup", Status.PASS,
-                "backup ${json.length} bytes, restore completed (${restored.playlists} playlists)"
-            )
+            val validated = BackupManager.validateDryRun(context, json, library)
+            results += if (validated.ok) {
+                CheckResult(
+                    "backup", Status.PASS,
+                    "backup ${json.length} bytes, dry-run validated " +
+                        "(${validated.playlists} playlists, ${validated.songs} songs)"
+                )
+            } else {
+                CheckResult("backup", Status.FAIL, validated.error ?: "invalid backup")
+            }
         } catch (e: Exception) {
             results += CheckResult("backup", Status.FAIL, e.message ?: "error")
         }

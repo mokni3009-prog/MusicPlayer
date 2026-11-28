@@ -30,7 +30,13 @@ object VisualizerHub {
     }
 
     private fun emit(magnitudes: FloatArray) {
-        listener?.invoke(magnitudes)
+        // v1.0.16 (m23): the main listener used to be invoked unguarded
+        // — a throw in the player screen's drawing code crashed the
+        // audio thread. Guard it like the extra listeners.
+        try {
+            listener?.invoke(magnitudes)
+        } catch (e: Exception) {
+        }
         for (l in extraListeners.toList()) {
             try {
                 l(magnitudes)

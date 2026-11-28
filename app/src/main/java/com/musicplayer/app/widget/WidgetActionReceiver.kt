@@ -40,9 +40,14 @@ class WidgetActionReceiver : BroadcastReceiver() {
         val handler = Handler(Looper.getMainLooper())
         val token = SessionToken(context, ComponentName(context, PlaybackService::class.java))
         val future = MediaController.Builder(context, token).buildAsync()
+        // v1.0.16 (C4): the old timeout called future.get() on the MAIN
+        // looper with no timeout — it fires exactly when the controller
+        // future has NOT completed in 5 s, i.e. precisely when the
+        // service is stuck starting, so the main thread blocked forever
+        // and the system showed an ANR. Cancel instead; never block here.
         val timeout = Runnable {
             try {
-                future.get()?.release()
+                future.cancel(true)
             } catch (e: Exception) {
             }
             pending.finish()
@@ -69,6 +74,13 @@ class WidgetActionReceiver : BroadcastReceiver() {
                     releaseLater(controller, handler, pending)
                 }
             } catch (e: Exception) {
+                // v1.0.16 (m29): a failed controller build used to do
+                // nothing at all — the widget button silently did nothing.
+                com.musicplayer.app.report.ErrorReporter.log(
+                    com.musicplayer.app.report.ErrorReporter.TYPE_ERROR,
+                    "Widget action failed: ${e.message}",
+                    e
+                )
                 handler.removeCallbacks(timeout)
                 pending.finish()
             }
@@ -91,10 +103,20 @@ class WidgetActionReceiver : BroadcastReceiver() {
     }
 
     private fun doAction(action: String) {
-        when (action) {
-            ACTION_PREV -> PlayerConnection.previous()
-            ACTION_TOGGLE -> PlayerConnection.togglePlayPause()
-            ACTION_NEXT -> PlayerConnection.next()
+        try {
+            when (action) {
+                ACTION_PREV -> PlayerConnection.previous()
+                ACTION_TOGGLE -> PlayerConnection.togglePlayPause()
+                ACTION_NEXT -> PlayerConnection.next()
+            }
+        } catch (e: Exception) {
+            // v1.0.16 (m29): a widget button that throws used to fail
+            // silently — log it so it is visible on the server.
+            com.musicplayer.app.report.ErrorReporter.log(
+                com.musicplayer.app.report.ErrorReporter.TYPE_ERROR,
+                "Widget action $action failed: ${e.message}",
+                e
+            )
         }
     }
 }

@@ -91,16 +91,30 @@ jobs:
       - name: Publish release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v1.0.15
-          name: Zeno Play v1.0.15
+          tag_name: v1.0.16
+          name: Zeno Play v1.0.16
           body: |
-            Zeno Play v1.0.15 — six fixes, no new features.
+            Zeno Play v1.0.16 — 8 new features + all 47 code-audit fixes.
 
-            - FIX (alarm + button): the ALARME tab said "touchez + pour en créer une" but there was no + button — the FAB sat behind the mini player whenever a song was loaded. It now floats above the mini player. And switching an enabled alarm off no longer makes it vanish from the screen (disabled alarms were hidden because only enabled ones were listed): off now only disables, the alarm stays in the list with its toggle off, and only the explicit delete action removes it.
-            - FIX (full-player background): the blurred album-cover background only covered the middle of the screen — embedded covers are often landscape pictures with black letterbox bars, and plain centerCrop kept those bars. The cover is now pre-rendered to the exact screen size (black bars trimmed, centre-cropped with a safety zoom, blurred in software so it also works below API 31), so the background covers the whole screen edge-to-edge.
-            - NEW (professional update dialogs, approved mockups): the plain system dialogs are replaced by Zeno-identity centred dialogs — "Nouvelle mise à jour" with the logo, title + gradient version badge and Installer / Plus tard buttons, and "Téléchargement de la mise à jour" with a circular gradient progress ring, percentage, downloaded / total sizes and an Annuler button (cancelling drops the partial file silently).
-            - FIX (waves): the self-test "waves" check failed on v1.0.14 — the spectrum path is hardened (24/32-bit PCM support in the spectrum processor, the fallback rebuild now keeps audio offload disabled and resets the shared processors, effects are re-attached after a rebuild) and the probe now measures where the audio actually is (the old probe always started at position 0, where many clips open with a second or two of digital silence; the bar itself is unchanged).
-            - FIX (self-test UI check): the check compared view bounds against the app-usable area, which excludes the navigation bar on Android 9, while the app runs force full-screen — the 5 root framework containers were always flagged. It now compares against the real screen size and skips window containers; the real checks (truncated text, clickable-but-disabled) are unchanged.
+            NEW (skip silence): silent parts in tracks (live recordings, podcasts) are skipped automatically — on/off in Settings, with a sensitivity choice (low / medium / high).
 
-            Installs over v1.0.14 normally (same release key, no uninstall needed).
+            NEW (3D surround / Virtualizer): spatial audio effect, on/off in Settings with an intensity choice (light / medium / strong). It attaches to the same audio session as the equalizer and reverb, so the EQ chain is untouched.
+
+            NEW (auto-download missing covers): when a song or album has no cover, the app fetches it automatically from MusicBrainz / Cover Art Archive (iTunes as a fallback) and caches it on the device. Only cover images are fetched — no listening data is sent anywhere. Switchable off in Settings.
+
+            NEW (star ratings 1–5 + smart playlist): rate the current song with the stars under the artist name in the full player (tap the current rating again to clear it). A new smart playlist "Les mieux notées" lists the songs rated 4 stars and up. Ratings are included in the backup.
+
+            NEW (listening history): every track played is recorded (song + when) and shown in "Historique d'écoute" from Settings — tap an entry to play it again. The history never leaves the device.
+
+            NEW (Auto-DJ): a button in the full player (Pro tools row) — when it is on, the app keeps the music going by itself, picking songs similar to the one just played (same artist, genre, album, category). Turning it on with an empty queue starts a random song.
+
+            NEW (voice commands, Darija + Modern Standard Arabic): tap the microphone in the full player and say "شغّل", "وقّف", "التالي", "السابق", "شغّل أغنية…" or "زيد الصوت" — the phone's speech recognizer listens once (ar-TN, then ar as a fallback). The microphone permission is asked just-in-time with a clear explanation; Zeno Play records nothing. Note honestly: Darija recognition depends on the phone's speech service and is weaker than MSA.
+
+            NEW (car mode, automatic): when the phone connects to the car's Bluetooth (car-audio device), the player switches to car mode by itself — big buttons, larger title, no distractions (tools row, lyrics and queue hidden). It returns to normal when the car disconnects. There is no manual button, by design.
+
+            NOT BUILT (crossfade, honestly): a true crossfade needs two players overlapping with a MediaSession handoff, which conflicts with the app's single-player + single wave-chain architecture (and the VLC engine). A fade-out would have been a fake — so it was not built. The other eight features are in.
+
+            FIXES (code audit, all 47): 4 critical — a stale queue index could crash the app (clamped now); the self-test "backup" check wrote to disk and could delete favorites (it now validates without writing); an alarm whose song was deleted from the library rang silently (it now posts a notification and plays the default tone); a widget action could freeze the app (the timeout no longer blocks the main thread). 13 major — saved queues work again, queue drag/swipe stays in sync, the tag editor / ringtone cutter / local lyrics / ReplayGain work on Android 10+ scoped storage, embedded lyrics display, the library loads off the main thread, cover loading cannot run out of memory, the blurred background renders off the main thread, the VLC engine race + unbounded cache are fixed, the alarm volume ramp cannot crash on rebuild, stopping a ringing alarm cannot fail silently, the Ken Burns animator no longer leaks, and volume boost / balance / Mono now work on 24/32-bit tracks. 30 minor — including French strings for the toasts, the unplayable MIDI chip removed, the lock-screen seek bar moves, the dead SettingsActivity removed from the manifest, and the updater closing its streams + verifying the download size.
+
+            Installs over v1.0.15 normally (same release key, no uninstall needed).
           files: app/build/outputs/apk/release/*.apk

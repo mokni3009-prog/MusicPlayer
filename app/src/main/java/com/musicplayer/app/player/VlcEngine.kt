@@ -47,6 +47,18 @@ object VlcEngine {
     private var currentSong: Song? = null
     private var preparedFile: File? = null
 
+    /** v1.0.16 (M9): generation of the last play() — stop()/release()
+     * bump it so a pending file copy cannot start a released player. */
+    @Volatile
+    private var playGeneration = 0
+
+    companion object {
+        /** v1.0.16 (M9): the VLC cache used to grow forever (one file
+         * per song, never deleted). Keep at most 20 files / 200 MB. */
+        private const val VLC_CACHE_MAX_FILES = 20
+        private const val VLC_CACHE_MAX_BYTES = 200L * 1024L * 1024L
+    }
+
     @Volatile
     var active: Boolean = false
         private set
@@ -150,6 +162,11 @@ object VlcEngine {
         }
         currentSong = song
         active = true
+        // v1.0.16 (M9): generation token — stop()/release() bump it, so
+        // a slow file copy that finishes after the user stopped (or
+        // after the engine was released) can no longer start playback
+        // on a released player.
+        val generation = ++playGeneration
         Thread {
             try {
                 val file = prepareFile(ctx, song)
@@ -158,6 +175,9 @@ object VlcEngine {
                     return@Thread
                 }
                 mainHandler.post {
+                    if (generation != playGeneration) return@post
+                    if (mediaPlayer !== player || libVlc == null) return@post
+                    if (currentSong?.id != song.id) return@post
                     try {
                         val lib = libVlc ?: return@post
                         val media = Media(lib, file.absolutePath)
@@ -268,6 +288,9 @@ object VlcEngine {
     }
 
     fun stop() {
+        // v1.0.16 (M9): invalidate any pending play() copy so it cannot
+        // start playback after the stop.
+        playGeneration++
         try {
             mediaPlayer?.stop()
         } catch (e: Exception) {
@@ -279,6 +302,7 @@ object VlcEngine {
     }
 
     fun release() {
+        playGeneration++
         try {
             stop()
         } catch (e: Exception) {
@@ -301,6 +325,7 @@ object VlcEngine {
     /**
      * Returns a local file for [song]: reuses the cached copy when it
      * exists with the same size, otherwise copies the content URI.
+     * Prunes the cache afterwards (v1.0.16 M9: it used to grow forever).
      */
     private fun prepareFile(context: Context, song: Song): File? {
         val dir = File(context.cacheDir, "vlc").apply { if (!exists()) mkdirs() }
@@ -308,6 +333,7 @@ object VlcEngine {
         val file = File(dir, "${song.id}.$ext")
         if (file.exists() && song.sizeBytes > 0 && file.length() == song.sizeBytes) {
             preparedFile = file
+            pruneCache(dir, file)
             return file
         }
         return try {
@@ -317,6 +343,7 @@ object VlcEngine {
                 }
             } ?: return null
             preparedFile = file
+            pruneCache(dir, file)
             file
         } catch (e: Exception) {
             ErrorReporter.log(
@@ -325,6 +352,29 @@ object VlcEngine {
                 e
             )
             null
+        }
+    }
+
+    /** Deletes the oldest cache files until the cap is met (never the
+     * file currently being played). Runs on the play() worker thread. */
+    private fun pruneCache(dir: File, keep: File) {
+        try {
+            val files = dir.listFiles()?.filter { it.isFile && it != keep }
+                ?.sortedByDescending { it.lastModified() } ?: return
+            var totalBytes = keep.length()
+            var kept = 0
+            for (f in files) {
+                totalBytes += f.length()
+                kept++
+                if (kept >= VLC_CACHE_MAX_FILES || totalBytes > VLC_CACHE_MAX_BYTES) {
+                    try {
+                        f.delete()
+                    } catch (e: Exception) {
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            // Cache pruning is best-effort; never break playback over it.
         }
     }
 }

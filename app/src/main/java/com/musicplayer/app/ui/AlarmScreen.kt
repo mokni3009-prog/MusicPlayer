@@ -45,6 +45,11 @@ class AlarmScreen(
         onClick = { alarm -> openEditDialog(alarm) }
     )
 
+    /** v1.0.16 (m15): reused formatters — updateClock() used to create
+     * two new SimpleDateFormat instances on every tick (every second). */
+    private val timeFormat = SimpleDateFormat("HH:mm", Locale.getDefault())
+    private val dateFormat = SimpleDateFormat("EEEE d MMM yyyy", Locale.getDefault())
+
     private val ticker = object : Runnable {
         override fun run() {
             if (!tickerRunning) return
@@ -99,9 +104,22 @@ class AlarmScreen(
 
     /** Reload the alarms and redraw everything. */
     fun refresh() {
-        val alarms = AlarmStore.load(activity)
-        val now = System.currentTimeMillis()
         updateClock()
+        // v1.0.16 (m15): the store read (disk JSON) used to run on the
+        // main thread — every 30 s from the ticker. Load off-thread,
+        // draw on the main thread.
+        Thread {
+            val alarms = try {
+                AlarmStore.load(activity)
+            } catch (e: Exception) {
+                emptyList<MusicAlarm>()
+            }
+            activity.runOnUiThread { refreshWith(alarms) }
+        }.start()
+    }
+
+    private fun refreshWith(alarms: List<MusicAlarm>) {
+        val now = System.currentTimeMillis()
         if (alarms.isEmpty()) {
             // Truly no alarms: empty state (card + list hidden, hint shown).
             nextAlarm = null
@@ -157,10 +175,8 @@ class AlarmScreen(
 
     private fun updateClock() {
         val now = System.currentTimeMillis()
-        binding.alarmClock.text =
-            SimpleDateFormat("HH:mm", Locale.getDefault()).format(now)
-        binding.alarmDate.text =
-            SimpleDateFormat("EEEE d MMM yyyy", Locale.getDefault()).format(now)
+        binding.alarmClock.text = timeFormat.format(now)
+        binding.alarmDate.text = dateFormat.format(now)
         val next = nextAlarm
         if (next != null && nextTriggerMs > 0) {
             binding.alarmNextInfo.text =

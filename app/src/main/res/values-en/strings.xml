@@ -53,6 +53,7 @@
     <string name="update_error">Could not check for updates</string>
     <string name="update_download_failed">Download failed</string>
     <string name="update_install_failed">Installation failed</string>
+    <string name="update_installed">Update installed successfully</string>
     <string name="update_allow_install">Allow installation from this source: enable “Allow from this source” in settings.</string>
     <string name="added_next">Will play next</string>
     <string name="playback_error">Could not play this song, retrying…</string>
@@ -413,6 +414,8 @@
     <string name="alarm_channel_name">Alarms</string>
     <string name="alarm_channel_desc">Music alarm notifications</string>
     <string name="alarm_ringing">Alarm</string>
+    <string name="alarm_song_missing">“%1$s” not found — default tone</string>
+    <string name="alarm_service_failed">The alarm fired, but the player could not start.</string>
     <string name="selftest_title">Self-test</string>
     <string name="selftest_desc">Checks every feature and the display, then sends the report automatically.</string>
     <string name="selftest_run">Run the self-test</string>
@@ -446,4 +449,43 @@
     <string name="waveform_bubbles">Golden bubbles</string>
     <string name="waveform_heart">Beating heart</string>
     <string name="waveform_ripples">Water ripples</string>
+
+    <!-- v1.0.16 -->
+    <string name="rating_star_1">1 star</string>
+    <string name="rating_star_2">2 stars</string>
+    <string name="rating_star_3">3 stars</string>
+    <string name="rating_star_4">4 stars</string>
+    <string name="rating_star_5">5 stars</string>
+    <string name="top_rated">Top rated</string>
+    <string name="top_rated_sub">4 stars and up</string>
+    <string name="history_title">Listening history</string>
+    <string name="history_clear">Clear</string>
+    <string name="history_empty">Nothing yet — play a song and it will show up here.</string>
+    <string name="history_cleared">History cleared</string>
+    <string name="history_song_missing">This song is no longer in the library</string>
+    <string name="open_history">Listening history</string>
+    <string name="unknown_title">Unknown title</string>
+    <string name="auto_dj">Auto-DJ</string>
+    <string name="auto_dj_on">Auto-DJ on — the music keeps going by itself</string>
+    <string name="auto_dj_off">Auto-DJ off</string>
+    <string name="voice_commands">Voice commands</string>
+    <string name="voice_listening_title">Voice command</string>
+    <string name="voice_listening_message">Speak now: “play”, “pause”, “next”, “play song…”\n\nOnly your command is sent to your phone\'s speech-recognition service — Zeno Play records nothing.</string>
+    <string name="voice_permission_title">Microphone</string>
+    <string name="voice_permission_message">The microphone is only used to hear your voice command (“play”, “next”…). Zeno Play records nothing.</string>
+    <string name="voice_permission_allow">Allow</string>
+    <string name="voice_permission_denied">Microphone denied — voice commands are off</string>
+    <string name="voice_unavailable">Speech recognition is not available on this phone</string>
+    <string name="voice_not_understood">I did not understand the command</string>
+    <string name="voice_not_understood_heard">I did not understand: “%1$s”</string>
+    <string name="voice_song_not_found">Song not found: %1$s</string>
+    <string name="car_mode_on">Car mode on</string>
+    <string name="car_mode_off">Car mode off</string>
+    <string name="settings_sound_title">Sound</string>
+    <string name="silence_skip">Skip silence</string>
+    <string name="silence_sensitivity">Sensitivity</string>
+    <string name="virtualizer">3D sound (Virtualizer)</string>
+    <string name="virtualizer_strength">3D intensity</string>
+    <string name="cover_auto_download">Auto covers</string>
+    <string name="cover_auto_download_desc">Automatically downloads a missing cover (MusicBrainz / iTunes). Only cover images are fetched — no listening data is sent.</string>
 </resources>

@@ -65,7 +65,10 @@ object EqManager {
 
     fun currentBandsDb(context: Context): FloatArray {
         val levels = loadLevels(context, currentOutput)
-        return levels ?: PRESETS["Normal"]!!.copyOf()
+        // v1.0.16 (m26): the "Normal" preset cannot be missing today,
+        // but a !! on a map lookup crashes the whole EQ path if it ever
+        // is — fall back to flat bands instead.
+        return levels ?: PRESETS["Normal"]?.copyOf() ?: FloatArray(5)
     }
 
     /** Attaches the EQ to a player audio session (called on session change). */
@@ -128,7 +131,7 @@ object EqManager {
             bassBoost?.enabled = enabled
             if (!enabled) return
             val levels = loadLevels(context, currentOutput)
-                ?: PRESETS["Normal"]!!
+                ?: PRESETS["Normal"]?.copyOf() ?: FloatArray(5)
             applyLevels(eq, levels)
             bassBoost?.setStrength((loadBass(context, currentOutput) * 10).toShort())
             // Mirror the same bands on the VLC engine (best effort).

@@ -113,9 +113,14 @@ class PlaybackService : MediaLibraryService() {
 
     private var player: ExoPlayer? = null
     private var session: MediaLibrarySession? = null
+
+    /** v1.0.16 (m20): kept so nudgeNotification() can re-post the
+     * notification directly after a VLC state change (no seek). */
+    private var notificationProvider: ZenoNotificationProvider? = null
     private var visualizer: Visualizer? = null
     private val spectrumProcessor = SpectrumAudioProcessor()
     private val gainProcessor = GainAudioProcessor()
+    private val silenceProcessor = SilenceSkippingAudioProcessor()
 
     /** True once we already fell back to the plain player — never retry twice. */
     private var fallbackActive = false
@@ -132,10 +137,24 @@ class PlaybackService : MediaLibraryService() {
     private var lastPositionMs = 0L
     private var replayGainCache = HashMap<Long, Float>()
 
+    /** v1.0.16 (m21): one shared thread for ReplayGain reads — the old
+     * code spawned a new Thread on every track change. */
+    private val replayGainExecutor =
+        java.util.concurrent.Executors.newSingleThreadExecutor()
+
     private var libraryCache: List<Song>? = null
+
+    /** v1.0.16 (m2): when the cached library was loaded — Android Auto
+     * used to keep the FIRST load forever, so songs added after the
+     * first browse never appeared. Reload after 5 minutes. */
+    private var libraryCacheMs: Long = 0L
 
     /** The alarm volume ramp, if one is running (cancelled by stopAlarm). */
     private var alarmRamp: Runnable? = null
+
+    /** Fallback alarm tone (C3) — the system default alarm sound, used
+     * when the alarm's song is gone from the library. Stopped by stopAlarm. */
+    private var alarmFallbackRingtone: android.media.Ringtone? = null
 
     private val noisyReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
@@ -326,8 +345,37 @@ class PlaybackService : MediaLibraryService() {
             exo.prepare()
             exo.play()
         } else {
-            exo.pause()
+            // v1.0.16 (F7): Auto-DJ keeps the music going with a similar
+            // song; otherwise the player stops at the end of the queue.
+            if (refillAutoDj()) {
+                exo.seekToNextMediaItem()
+                exo.prepare()
+                exo.play()
+            } else {
+                exo.pause()
+            }
         }
+    }
+
+    /**
+     * v1.0.16 (F7): Auto-DJ refill — appends one song similar to the
+     * current one to the timeline and to PlayerConnection.songs.
+     * Returns true when a song was added.
+     */
+    private fun refillAutoDj(): Boolean {
+        val exo = player ?: return false
+        if (!AutoDj.isEnabled(applicationContext)) return false
+        val library = library()
+        if (library.isEmpty()) return false
+        val seed = PlayerConnection.currentSong()
+            ?: exo.currentMediaItem?.mediaId?.toLongOrNull()?.let { id ->
+                library.firstOrNull { it.id == id }
+            } ?: return false
+        val playedIds = PlayerConnection.songs.map { it.id }.toSet()
+        val next = AutoDj.pickNext(library, seed, playedIds) ?: return false
+        PlayerConnection.songs = PlayerConnection.songs + next
+        exo.addMediaItem(PlayerConnection.toMediaItem(next))
+        return true
     }
 
     private fun recordPlayIfListened() {
@@ -345,10 +393,11 @@ class PlaybackService : MediaLibraryService() {
     /** Nudges the notification to refresh (e.g. after a VLC state change). */
     private fun nudgeNotification() {
         try {
-            val exo = player ?: return
-            if (exo.playbackState != Player.STATE_IDLE) {
-                exo.seekTo(exo.currentPosition)
-            }
+            // v1.0.16 (m20): the old code sought to the current position
+            // to force a refresh — a no-op seek that could glitch
+            // playback. Re-post the notification directly instead.
+            val s = session ?: return
+            notificationProvider?.refreshNow(s)
         } catch (e: Exception) {
             // Best-effort only.
         }
@@ -362,6 +411,8 @@ class PlaybackService : MediaLibraryService() {
             if (audioSessionId != 0) {
                 EqManager.attach(applicationContext, audioSessionId)
                 ReverbManager.attach(applicationContext, audioSessionId)
+                // v1.0.16 (F3): 3D surround on the same session.
+                VirtualizerManager.attach(applicationContext, audioSessionId)
             }
         }
 
@@ -372,10 +423,31 @@ class PlaybackService : MediaLibraryService() {
             com.musicplayer.app.widget.ZenoWidgetProvider.updateAll(applicationContext)
         }
 
+        /** v1.0.16 (M4): embedded lyrics (ID3 USLT / Vorbis LYRICS)
+         * arrive here as metadata — extract them so the player screen
+         * can show them. Only overwrites when lyrics are actually
+         * present, so a metadata block without lyrics does not erase
+         * the ones already found. */
+        override fun onMetadata(metadata: androidx.media3.common.Metadata) {
+            try {
+                val lyrics = com.musicplayer.app.player.LyricsManager
+                    .extractFromMetadata(metadata)
+                if (lyrics != null) {
+                    com.musicplayer.app.player.LyricsManager.onMetadataLyrics(lyrics)
+                }
+            } catch (e: Exception) {
+                // Metadata parsing must never break playback.
+            }
+        }
+
         override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
             recordPlayIfListened()
             saveResumeState()
             PlayerConnection.clearAB()
+            // v1.0.16 (M4): clear the previous track's embedded lyrics —
+            // the new track's onMetadata fills it in again (or the
+            // jaudiotagger fallback reads it from the file).
+            com.musicplayer.app.player.LyricsManager.onMetadataLyrics(null)
             com.musicplayer.app.widget.ZenoWidgetProvider.updateAll(applicationContext)
             val song = mediaItem?.mediaId?.toLongOrNull()
                 ?.let { id -> PlayerConnection.songs.firstOrNull { it.id == id } }
@@ -383,6 +455,8 @@ class PlaybackService : MediaLibraryService() {
             currentTrackId = song?.id ?: -1L
             currentTrackListenedMs = 0L
             if (song == null) return
+            // v1.0.16 (F6): listening history — record every track start.
+            com.musicplayer.app.data.HistoryStore.record(applicationContext, song)
             applyReplayGainAsync(song)
             applyPerSongAudio(song)
             // Sleep timer (songs mode) counts finished tracks; the
@@ -399,6 +473,16 @@ class PlaybackService : MediaLibraryService() {
                 player?.volume = VolumeBoost.playerVolume() *
                     PlayerConnection.sleepFadeFactor
                 player?.play()
+            }
+            // v1.0.16 (F7): Auto-DJ — keep one song buffered ahead so
+            // the music never stops at the end of the queue.
+            if (AutoDj.isEnabled(applicationContext)) {
+                val exoPlayer = player
+                if (exoPlayer != null &&
+                    exoPlayer.mediaItemCount - exoPlayer.currentMediaItemIndex <= 1
+                ) {
+                    refillAutoDj()
+                }
             }
         }
 
@@ -498,16 +582,20 @@ class PlaybackService : MediaLibraryService() {
             VolumeBoost.replayGain = factor
             return
         }
-        Thread {
+        // v1.0.16 (m21): one shared thread instead of a new Thread per
+        // track — track changes used to pile up threads.
+        replayGainExecutor.execute {
             try {
-                val paths = com.musicplayer.app.data.TagEditor.filePathsFor(
-                    applicationContext, listOf(song.id)
+                // v1.0.16 (M3): the tag used to be read through a
+                // MediaStore DATA file path — empty on Android 10+.
+                // Read it from a temp copy of the content Uri instead.
+                val tmp = com.musicplayer.app.data.TagEditor.copyUriToTempFile(
+                    applicationContext, song.uri,
+                    ".${song.extension.ifBlank { "bin" }}"
                 )
-                val path = paths[song.id]
-                if (!path.isNullOrBlank()) {
-                    val file = java.io.File(path)
-                    if (file.exists() && file.canRead()) {
-                        val audioFile = AudioFileIO.read(file)
+                try {
+                    if (tmp != null && tmp.exists() && tmp.canRead()) {
+                        val audioFile = AudioFileIO.read(tmp)
                         val tag = audioFile.tag
                         val trackGain = tag?.getFirst("REPLAYGAIN_TRACK_GAIN")
                             ?.trim()?.removeSuffix(" dB")?.toFloatOrNull()
@@ -517,15 +605,17 @@ class PlaybackService : MediaLibraryService() {
                         if (db != null) {
                             VolumeBoost.setReplayGainDb(db)
                             replayGainCache[song.id] = VolumeBoost.replayGain
-                            return@Thread
+                            return@execute
                         }
                     }
+                } finally {
+                    tmp?.delete()
                 }
                 VolumeBoost.replayGain = 1.0f
             } catch (e: Exception) {
                 VolumeBoost.replayGain = 1.0f
             }
-        }.start()
+        }
     }
 
     /**
@@ -616,13 +706,15 @@ class PlaybackService : MediaLibraryService() {
 
     private fun library(): List<Song> {
         val cached = libraryCache
-        if (cached != null) return cached
+        val now = System.currentTimeMillis()
+        if (cached != null && now - libraryCacheMs < 5 * 60 * 1000L) return cached
         val loaded = try {
             MusicRepository.loadSongs(applicationContext)
         } catch (e: Exception) {
             emptyList<Song>()
         }
         libraryCache = loaded
+        libraryCacheMs = now
         return loaded
     }
 
@@ -676,6 +768,24 @@ class PlaybackService : MediaLibraryService() {
             controller: MediaSession.ControllerInfo,
             playerCommand: Int
         ): Int {
+            // v1.0.16 (m1): the 3-second rule — Previous restarts the
+            // current song when it already played > 3 s — was only in
+            // PlayerConnection.previous() (app UI). External controllers
+            // (notification, Android Auto) went straight to the raw
+            // command and skipped to the previous song instead. Apply it
+            // here, for both engines, before anything else.
+            if (playerCommand == Player.COMMAND_SEEK_TO_PREVIOUS ||
+                playerCommand == Player.COMMAND_SEEK_TO_PREVIOUS_MEDIA_ITEM
+            ) {
+                val exo = player
+                val position = if (VlcEngine.active) VlcEngine.positionMs
+                else exo?.currentPosition ?: 0L
+                if (position > 3000) {
+                    if (VlcEngine.active) VlcEngine.seekTo(0) else exo?.seekTo(0)
+                    // Already handled — block the raw command.
+                    return SessionResult.RESULT_ERROR_INVALID_STATE
+                }
+            }
             if (!VlcEngine.active) {
                 return super.onPlayerCommandRequest(session, controller, playerCommand)
             }
@@ -697,9 +807,8 @@ class PlaybackService : MediaLibraryService() {
                 }
                 Player.COMMAND_SEEK_TO_PREVIOUS, Player.COMMAND_SEEK_TO_PREVIOUS_MEDIA_ITEM -> {
                     if (exo == null) return SessionResult.RESULT_ERROR_INVALID_STATE
-                    if (exo.currentPosition > 3000) {
-                        VlcEngine.seekTo(0)
-                    } else if (exo.hasPreviousMediaItem()) {
+                    // (The > 3 s restart case is handled above.)
+                    if (exo.hasPreviousMediaItem()) {
                         exo.seekToPreviousMediaItem()
                         exo.prepare()
                         exo.play()
@@ -1146,10 +1255,39 @@ class PlaybackService : MediaLibraryService() {
             val library = MusicRepository.loadSongs(applicationContext)
             val index = library.indexOfFirst { it.id == songId }
             if (index < 0) {
+                // v1.0.16 (C3): the alarm used to return here — BEFORE
+                // posting its notification — so a deleted song meant a
+                // silently missed alarm, every day for a repeating alarm.
+                // Ring anyway: post the notification (naming the missing
+                // song) and play the system default alarm tone.
                 ErrorReporter.log(
                     ErrorReporter.TYPE_ERROR,
-                    "Alarm song not found in library (id=$songId)"
+                    "Alarm song not found in library (id=$songId) — fallback tone"
                 )
+                postAlarmNotification(
+                    alarmId, alarmName,
+                    getString(R.string.alarm_song_missing, songTitle)
+                )
+                try {
+                    val toneUri = android.media.RingtoneManager.getDefaultUri(
+                        android.media.RingtoneManager.TYPE_ALARM
+                    ) ?: android.media.RingtoneManager.getDefaultUri(
+                        android.media.RingtoneManager.TYPE_NOTIFICATION
+                    )
+                    val tone = toneUri?.let {
+                        android.media.RingtoneManager.getRingtone(applicationContext, it)
+                    }
+                    tone?.let {
+                        alarmFallbackRingtone = it
+                        it.play()
+                    }
+                } catch (e: Exception) {
+                    ErrorReporter.log(
+                        ErrorReporter.TYPE_ERROR,
+                        "Alarm fallback tone failed: ${e.message}",
+                        e
+                    )
+                }
                 return
             }
             postAlarmNotification(alarmId, alarmName, songTitle)
@@ -1172,19 +1310,38 @@ class PlaybackService : MediaLibraryService() {
             var step = 0
             val ramp = object : Runnable {
                 override fun run() {
-                    step++
-                    val f = (step / 30f).coerceIn(0f, 1f)
-                    exo.volume = targetVolume * f
-                    VlcEngine.setVolume(VolumeBoost.vlcVolumePercent(targetPercent, f))
-                    // v1.0.8: the alarm ramp raises the DEVICE volume too.
-                    SystemVolumeSync.applySliderPercent((targetPercent * f).toInt())
-                    if (step < 30 && exo.isPlaying) {
-                        mainHandler.postDelayed(this, 1000)
-                    } else {
+                    // v1.0.16 (M10): the ramp used to write volume to the
+                    // player captured at alarm time even after a rebuild
+                    // released it — IllegalStateException on the main
+                    // thread, and the ramp kept running. Stop the moment
+                    // the player is no longer the current one.
+                    val current = player
+                    if (alarmRamp !== this || current == null || current !== exo) {
                         alarmRamp = null
-                        exo.volume = targetVolume
-                        VlcEngine.setVolume(VolumeBoost.vlcVolumePercent(targetPercent, 1f))
-                        SystemVolumeSync.applySliderPercent(targetPercent)
+                        return
+                    }
+                    try {
+                        step++
+                        val f = (step / 30f).coerceIn(0f, 1f)
+                        current.volume = targetVolume * f
+                        VlcEngine.setVolume(VolumeBoost.vlcVolumePercent(targetPercent, f))
+                        // v1.0.8: the alarm ramp raises the DEVICE volume too.
+                        SystemVolumeSync.applySliderPercent((targetPercent * f).toInt())
+                        if (step < 30 && current.isPlaying) {
+                            mainHandler.postDelayed(this, 1000)
+                        } else {
+                            alarmRamp = null
+                            current.volume = targetVolume
+                            VlcEngine.setVolume(VolumeBoost.vlcVolumePercent(targetPercent, 1f))
+                            SystemVolumeSync.applySliderPercent(targetPercent)
+                        }
+                    } catch (e: Exception) {
+                        alarmRamp = null
+                        ErrorReporter.log(
+                            ErrorReporter.TYPE_ERROR,
+                            "Alarm ramp failed: ${e.message}",
+                            e
+                        )
                     }
                 }
             }
@@ -1252,6 +1409,12 @@ class PlaybackService : MediaLibraryService() {
             alarmRamp = null
         } catch (e: Exception) {
         }
+        // v1.0.16 (C3): stop the fallback tone too, if it is ringing.
+        try {
+            alarmFallbackRingtone?.stop()
+            alarmFallbackRingtone = null
+        } catch (e: Exception) {
+        }
         try {
             VlcEngine.stop()
         } catch (e: Exception) {
@@ -1282,7 +1445,12 @@ class PlaybackService : MediaLibraryService() {
         // Media3 1.5: the notification provider is set on the service
         // (not on the session Builder anymore) and must be set before
         // onCreate() returns; it survives session rebuilds.
-        setMediaNotificationProvider(ZenoNotificationProvider(this))
+        val provider = ZenoNotificationProvider(this)
+        notificationProvider = provider
+        setMediaNotificationProvider(provider)
+        // v1.0.16 (F2): load the stored skip-silence setting into the
+        // processor's live switch.
+        SilenceSkip.applyAll(applicationContext)
         VlcEngine.init(applicationContext)
         VlcEngine.listener = vlcListener
         // v1.0.3: the service must never die at startup. If the spectrum
@@ -1376,7 +1544,7 @@ class PlaybackService : MediaLibraryService() {
                     .setEnableAudioTrackPlaybackParams(enableAudioTrackPlaybackParams)
                     .setAudioProcessors(
                         arrayOf<androidx.media3.common.audio.AudioProcessor>(
-                            spectrumProcessor, gainProcessor
+                            spectrumProcessor, gainProcessor, silenceProcessor
                         )
                     )
                     .build()
@@ -1460,16 +1628,17 @@ class PlaybackService : MediaLibraryService() {
             if (sessionId == 0 ||
                 sessionId == androidx.media3.common.C.AUDIO_SESSION_ID_UNSET
             ) {
-                ErrorReporter.log(
-                    ErrorReporter.TYPE_ERROR,
-                    "EQ attach skipped: no audio session yet",
-                    null
-                )
+                // v1.0.16 (m22): no session yet is the NORMAL case before
+                // playback starts (the 800 ms retry attaches it later) —
+                // the old code filed an error report for it on every
+                // fresh player build. Stay silent here.
                 return
             }
             setupVisualizer(sessionId)
             EqManager.attach(applicationContext, sessionId)
             ReverbManager.attach(applicationContext, sessionId)
+            // v1.0.16 (F3): 3D surround on the same session.
+            VirtualizerManager.attach(applicationContext, sessionId)
         } catch (e: Exception) {
             ErrorReporter.log(
                 ErrorReporter.TYPE_ERROR,

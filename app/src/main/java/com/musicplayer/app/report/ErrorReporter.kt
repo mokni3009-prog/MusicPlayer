@@ -127,18 +127,24 @@ object ErrorReporter {
         }
     }
 
-    /** Log any in-app error. Saves locally and tries to upload right away. */
+    /** Log any in-app error. Saves locally and tries to upload right away.
+     * v1.0.16 (m7): the whole save (JSON + disk write + folder prune)
+     * used to run synchronously on the caller's thread — including the
+     * main thread. It now runs on the IO scope; only the crash handler
+     * still saves synchronously (the process is dying there). */
     fun log(
         type: String,
         message: String,
         throwable: Throwable? = null,
         context: Map<String, Any?> = emptyMap()
     ) {
-        try {
-            val file = saveReportSync(type, message, throwable, context) ?: return
-            scope.launch { uploadFile(file) }
-        } catch (e: Exception) {
-            Log.w(TAG, "log failed", e)
+        scope.launch {
+            try {
+                val file = saveReportSync(type, message, throwable, context) ?: return@launch
+                uploadFile(file)
+            } catch (e: Exception) {
+                Log.w(TAG, "log failed", e)
+            }
         }
     }
 
@@ -218,9 +224,11 @@ object ErrorReporter {
 
     /** POSTs one saved report; deletes the file on success (2xx). */
     private fun uploadFile(file: File) {
+        // v1.0.16 (m7): the connection was never disconnected.
+        var conn: HttpURLConnection? = null
         try {
             val body = file.readText()
-            val conn = URL(ENDPOINT).openConnection() as HttpURLConnection
+            conn = URL(ENDPOINT).openConnection() as HttpURLConnection
             conn.requestMethod = "POST"
             conn.setRequestProperty("Content-Type", "application/json")
             conn.connectTimeout = 10000
@@ -236,6 +244,11 @@ object ErrorReporter {
         } catch (e: Exception) {
             // Offline or server unreachable: keep the file, retry on next launch.
             Log.w(TAG, "upload failed for ${file.name}", e)
+        } finally {
+            try {
+                conn?.disconnect()
+            } catch (e: Exception) {
+            }
         }
     }
 }

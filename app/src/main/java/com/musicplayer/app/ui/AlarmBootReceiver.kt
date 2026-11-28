@@ -14,6 +14,14 @@ class AlarmBootReceiver : BroadcastReceiver() {
         try {
             AlarmScheduler.rescheduleAll(context)
         } catch (e: Exception) {
+            // v1.0.16 (m14): a failed re-schedule after reboot used to
+            // fail silently — every alarm would then be dead until the
+            // app was opened. Log it so it is visible on the server.
+            com.musicplayer.app.report.ErrorReporter.log(
+                com.musicplayer.app.report.ErrorReporter.TYPE_ERROR,
+                "Alarm re-schedule after boot failed: ${e.message}",
+                e
+            )
         }
     }
 }

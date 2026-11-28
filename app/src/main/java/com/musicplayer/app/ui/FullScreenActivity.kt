@@ -2,10 +2,11 @@ package com.musicplayer.app.ui
 
 import android.content.Context
 import android.os.Bundle
-import android.view.View
 import android.view.WindowManager
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import com.musicplayer.app.R
 
 /**
@@ -65,12 +66,14 @@ abstract class FullScreenActivity : AppCompatActivity() {
 
     /** Hides the status bar and navigation bar (immersive sticky). */
     protected fun applyImmersive() {
-        window.decorView.systemUiVisibility =
-            View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY or
-                View.SYSTEM_UI_FLAG_LAYOUT_STABLE or
-                View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION or
-                View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN or
-                View.SYSTEM_UI_FLAG_HIDE_NAVIGATION or
-                View.SYSTEM_UI_FLAG_FULLSCREEN
+        // v1.0.16 (m25): the old code used the deprecated
+        // decorView.systemUiVisibility flags — replaced with
+        // WindowInsetsControllerCompat (same behaviour, no deprecation).
+        val controller = WindowInsetsControllerCompat(window, window.decorView)
+        controller.hide(
+            WindowInsetsCompat.Type.statusBars() or WindowInsetsCompat.Type.navigationBars()
+        )
+        controller.systemBarsBehavior =
+            WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
     }
 }

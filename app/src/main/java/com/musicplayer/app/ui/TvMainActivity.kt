@@ -213,8 +213,11 @@ class TvMainActivity : FullScreenActivity() {
         val lists = PlaylistStore.load(this)
         binding.viewCount.text = getString(R.string.tv_count_playlists, lists.size)
         binding.tvRecycler.adapter = groupAdapter
+        // v1.0.16 (m27): the song lookup used to be find() inside the
+        // map (O(n^2) per playlist) — index once.
+        val byId = allSongs.associateBy { it.id }
         groupAdapter.submitList(lists.map { playlist ->
-            val songs = playlist.songIds.mapNotNull { id -> allSongs.find { it.id == id } }
+            val songs = playlist.songIds.mapNotNull { id -> byId[id] }
             GroupAdapter.GroupItem(
                 playlist.id.toString(), playlist.name,
                 getString(R.string.tv_count_songs, songs.size),

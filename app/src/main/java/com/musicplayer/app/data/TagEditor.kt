@@ -1,23 +1,30 @@
 package com.musicplayer.app.data
 
+import android.content.ContentValues
 import android.content.Context
-import android.os.Build
+import android.net.Uri
 import android.provider.MediaStore
 import com.musicplayer.app.report.ErrorReporter
 import org.jaudiotagger.audio.AudioFileIO
 import org.jaudiotagger.tag.FieldKey
 import org.jaudiotagger.tag.images.ArtworkFactory
 import java.io.File
+import java.io.FileOutputStream
 
 /**
  * Batch tag editing with jaudiotagger: title, artist, album, genre, year
  * and cover art, applied to one or several files at once.
  *
- * On Android 10+ the app needs write access to each file: the caller must
- * obtain it first (MediaStore.createWriteRequest on API 30+); below API 30
- * the file is written directly. The [filePath] for a song comes from the
- * MediaStore DATA column and may be empty on Android 10+ — in that case
- * the song is skipped and reported as failed (never silently dropped).
+ * v1.0.16 (M3): the editor used to work on java.io.File paths from the
+ * MediaStore DATA column — on Android 10+ that column is empty or the
+ * file is not writable, so tag editing (and the ringtone cutter and
+ * ReplayGain, which used the same lookup) silently failed. The flow is
+ * now content-Uri based: the file is copied to a temp file, edited
+ * there with jaudiotagger, and written back through the content
+ * resolver. The caller must obtain write access first on API 30+
+ * (MediaStore.createWriteRequest) — when the write-back throws a
+ * SecurityException the result reports [TagEditResult.needsPermission]
+ * so the caller can request the grant and retry.
  */
 object TagEditor {
 
@@ -34,7 +41,12 @@ object TagEditor {
 
     data class TagEditResult(
         val updated: Int,
-        val failed: List<String>
+        val failed: List<String>,
+        /** True when at least one write failed with a SecurityException
+         * (missing write grant) — the caller can request it and retry. */
+        val needsPermission: Boolean = false,
+        /** Uris of the songs that failed with a SecurityException. */
+        val failedUris: List<Uri> = emptyList()
     )
 
     /** When the last tag edit succeeded (ms) — MainActivity reloads the
@@ -43,35 +55,51 @@ object TagEditor {
     @Volatile
     var lastSuccessfulEditMs: Long = 0L
 
-    /** Returns the absolute file paths for the given song ids. */
-    fun filePathsFor(context: Context, songIds: List<Long>): Map<Long, String> {
-        val result = mutableMapOf<Long, String>()
-        if (songIds.isEmpty()) return result
-        try {
-            val placeholders = songIds.joinToString(",") { "?" }
-            context.contentResolver.query(
-                MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
-                arrayOf(MediaStore.Audio.Media._ID, MediaStore.Audio.Media.DATA),
-                "${MediaStore.Audio.Media._ID} IN ($placeholders)",
-                songIds.map { it.toString() }.toTypedArray(),
+    /**
+     * Copies a content Uri to a temp file in the app cache, for libraries
+     * that only work on java.io.File (jaudiotagger, MediaExtractor…).
+     * Returns null when the content cannot be read. The caller MUST
+     * delete the returned file when done.
+     */
+    fun copyUriToTempFile(context: Context, uri: Uri, suffix: String): File? {
+        return try {
+            val tmp = File.createTempFile("zeno-", suffix, context.cacheDir)
+            val copied = try {
+                context.contentResolver.openInputStream(uri)?.use { input ->
+                    FileOutputStream(tmp).use { out -> input.copyTo(out) }
+                } != null
+            } catch (e: Exception) {
+                false
+            }
+            if (!copied) {
+                tmp.delete()
                 null
-            )?.use { cursor ->
-                val idCol = cursor.getColumnIndex(MediaStore.Audio.Media._ID)
-                val dataCol = cursor.getColumnIndex(MediaStore.Audio.Media.DATA)
-                while (cursor.moveToNext()) {
-                    if (idCol >= 0 && dataCol >= 0) {
-                        result[cursor.getLong(idCol)] = cursor.getString(dataCol) ?: ""
-                    }
-                }
+            } else {
+                tmp
             }
         } catch (e: Exception) {
-            ErrorReporter.log(
-                ErrorReporter.TYPE_ERROR,
-                "Tag editor path lookup failed: ${e.message}",
-                e
-            )
+            null
         }
-        return result
+    }
+
+    /** Reads the current tags of one song (for pre-fill). Null when unreadable. */
+    fun readTags(context: Context, song: Song): TagChanges? {
+        val tmp = copyUriToTempFile(context, song.uri, ".${song.extension.ifBlank { "bin" }}")
+            ?: return null
+        return try {
+            val tag = AudioFileIO.read(tmp).tag ?: return null
+            TagChanges(
+                title = tag.getFirst(FieldKey.TITLE).ifBlank { null },
+                artist = tag.getFirst(FieldKey.ARTIST).ifBlank { null },
+                album = tag.getFirst(FieldKey.ALBUM).ifBlank { null },
+                genre = tag.getFirst(FieldKey.GENRE).ifBlank { null },
+                year = tag.getFirst(FieldKey.YEAR).ifBlank { null }
+            )
+        } catch (e: Exception) {
+            null
+        } finally {
+            tmp.delete()
+        }
     }
 
     /**
@@ -79,39 +107,26 @@ object TagEditor {
      * batch editing). Runs on the caller's thread; call from a background
      * thread.
      */
-    fun applyTags(songs: List<Song>, paths: Map<Long, String>, changes: TagChanges): TagEditResult {
+    fun applyTags(context: Context, songs: List<Song>, changes: TagChanges): TagEditResult {
         var updated = 0
         val failed = mutableListOf<String>()
+        var needsPermission = false
+        val failedUris = mutableListOf<Uri>()
         for (song in songs) {
-            val path = paths[song.id]
-            if (path.isNullOrBlank()) {
-                // v1.0.9: this used to fail SILENTLY (no report) — log it
-                // so a future failure is visible on the server.
+            val tmp = copyUriToTempFile(
+                context, song.uri, ".${song.extension.ifBlank { "bin" }}"
+            )
+            if (tmp == null) {
                 ErrorReporter.log(
                     ErrorReporter.TYPE_ERROR,
-                    "Tag edit failed for ${song.title}: no file path (scoped storage)",
+                    "Tag edit failed for ${song.title}: cannot read file",
                     null
                 )
                 failed.add(song.title)
                 continue
             }
             try {
-                val file = File(path)
-                if (!file.exists() || !file.canWrite()) {
-                    // v1.0.9: this used to fail SILENTLY (no report). The
-                    // usual cause on Android 9 is the missing
-                    // WRITE_EXTERNAL_STORAGE permission — TagEditActivity
-                    // requests it before saving now. On Android 10+ the
-                    // file needs a MediaStore write request instead.
-                    ErrorReporter.log(
-                        ErrorReporter.TYPE_ERROR,
-                        "Tag edit failed for ${song.title}: file not writable",
-                        null
-                    )
-                    failed.add(song.title)
-                    continue
-                }
-                val audioFile = AudioFileIO.read(file)
+                val audioFile = AudioFileIO.read(tmp)
                 val tag = audioFile.tagOrCreateAndSetDefault
                 changes.title?.let { tag.setField(FieldKey.TITLE, it) }
                 changes.artist?.let { tag.setField(FieldKey.ARTIST, it) }
@@ -128,13 +143,52 @@ object TagEditor {
                 if (changes.removeCover) {
                     tag.deleteArtworkField()
                 } else if (changes.coverBytes != null) {
-                    val artwork = ArtworkFactory.createArtworkFromFile(
-                        writeTempCover(changes.coverBytes)
-                    )
-                    tag.deleteArtworkField()
-                    tag.setField(artwork)
+                    val coverTmp = writeTempCover(changes.coverBytes)
+                    try {
+                        val artwork = ArtworkFactory.createArtworkFromFile(coverTmp)
+                        tag.deleteArtworkField()
+                        tag.setField(artwork)
+                    } finally {
+                        // v1.0.16 (m10): the temp cover file was never
+                        // deleted — one stray file per cover edit.
+                        coverTmp.delete()
+                    }
                 }
                 audioFile.commit()
+                // Write the edited file back through the content resolver
+                // (works on Android 10+ with a write grant, and on older
+                // versions with WRITE_EXTERNAL_STORAGE).
+                try {
+                    context.contentResolver.openOutputStream(song.uri, "wt")?.use { out ->
+                        tmp.inputStream().use { input -> input.copyTo(out) }
+                    } ?: throw IllegalStateException("output stream failed")
+                } catch (e: SecurityException) {
+                    // Missing write grant — report it so the caller can
+                    // request it (MediaStore.createWriteRequest) and retry.
+                    needsPermission = true
+                    failedUris.add(song.uri)
+                    ErrorReporter.log(
+                        ErrorReporter.TYPE_ERROR,
+                        "Tag edit failed for ${song.title}: no write access",
+                        e
+                    )
+                    failed.add(song.title)
+                    continue
+                }
+                // Update the MediaStore row so the library shows the new
+                // tags without waiting for a rescan.
+                try {
+                    val values = ContentValues().apply {
+                        changes.title?.let { put(MediaStore.Audio.Media.TITLE, it) }
+                        changes.artist?.let { put(MediaStore.Audio.Media.ARTIST, it) }
+                        changes.album?.let { put(MediaStore.Audio.Media.ALBUM, it) }
+                    }
+                    if (values.size() > 0) {
+                        context.contentResolver.update(song.uri, values, null, null)
+                    }
+                } catch (e: Exception) {
+                    // Best-effort: the file itself was already updated.
+                }
                 lastSuccessfulEditMs = System.currentTimeMillis()
                 updated++
             } catch (e: Exception) {
@@ -144,9 +198,11 @@ object TagEditor {
                     e
                 )
                 failed.add(song.title)
+            } finally {
+                tmp.delete()
             }
         }
-        return TagEditResult(updated, failed)
+        return TagEditResult(updated, failed, needsPermission, failedUris)
     }
 
     private fun writeTempCover(bytes: ByteArray): File {

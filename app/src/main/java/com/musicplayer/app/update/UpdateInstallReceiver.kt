@@ -6,6 +6,7 @@ import android.content.Intent
 import android.content.pm.PackageInstaller
 import android.util.Log
 import android.widget.Toast
+import com.musicplayer.app.R
 import com.musicplayer.app.report.ErrorReporter
 
 /** Receives the PackageInstaller result for an in-app update. */
@@ -16,7 +17,9 @@ class UpdateInstallReceiver : BroadcastReceiver() {
         Log.i(TAG, "install status=$status message=$message")
         when (status) {
             PackageInstaller.STATUS_SUCCESS -> {
-                Toast.makeText(context, "تم تثبيت التحديث بنجاح", Toast.LENGTH_LONG).show()
+                // v1.0.16 (m4): the toast was hardcoded Arabic in a fully
+                // French app — now a proper string resource.
+                Toast.makeText(context, R.string.update_installed, Toast.LENGTH_LONG).show()
             }
             PackageInstaller.STATUS_FAILURE,
             PackageInstaller.STATUS_FAILURE_ABORTED,
@@ -29,9 +32,10 @@ class UpdateInstallReceiver : BroadcastReceiver() {
                     ErrorReporter.TYPE_UPDATE,
                     "Update install failed: status=$status message=$message"
                 )
+                val base = context.getString(R.string.update_install_failed)
                 Toast.makeText(
                     context,
-                    "فشل تثبيت التحديث${if (!message.isNullOrBlank()) ": $message" else ""}",
+                    "$base${if (!message.isNullOrBlank()) ": $message" else ""}",
                     Toast.LENGTH_LONG
                 ).show()
             }

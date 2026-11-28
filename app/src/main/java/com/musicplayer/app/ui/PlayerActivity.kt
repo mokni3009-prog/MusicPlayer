@@ -1,9 +1,14 @@
 package com.musicplayer.app.ui
 
+import android.Manifest
 import android.animation.Animator
 import android.animation.AnimatorListenerAdapter
 import android.animation.ObjectAnimator
+import android.content.BroadcastReceiver
 import android.content.ComponentName
+import android.content.Context
+import android.content.Intent
+import android.content.pm.PackageManager
 import android.content.res.ColorStateList
 import android.hardware.Sensor
 import android.hardware.SensorEvent
@@ -36,13 +41,17 @@ import com.musicplayer.app.R
 import com.musicplayer.app.data.FavoritesStore
 import com.musicplayer.app.data.PlaybackStateStore
 import com.musicplayer.app.data.QueueStore
+import com.musicplayer.app.data.RatingStore
 import com.musicplayer.app.data.Song
 import com.google.android.material.transition.platform.MaterialContainerTransformSharedElementCallback
 import com.musicplayer.app.databinding.ActivityPlayerBinding
+import com.musicplayer.app.player.AutoDj
+import com.musicplayer.app.player.CarMode
 import com.musicplayer.app.player.LyricsManager
 import com.musicplayer.app.player.PlaybackService
 import com.musicplayer.app.player.PlayerConnection
 import com.musicplayer.app.player.VisualizerHub
+import com.musicplayer.app.player.VoiceCommands
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -78,6 +87,38 @@ class PlayerActivity : FullScreenActivity() {
     private var tiltY = 0f
     private var lastBeatHapticMs = 0L
     private var kenBurnsAnimator: ObjectAnimator? = null
+
+    /** v1.0.16 (F9): car mode — flips when the car's Bluetooth
+     * connects/disconnects; the player applies the big-button layout
+     * and shows a toast. */
+    private val carModeReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            applyCarMode()
+            Toast.makeText(
+                this@PlayerActivity,
+                if (CarMode.isActive(this@PlayerActivity)) R.string.car_mode_on
+                else R.string.car_mode_off,
+                Toast.LENGTH_SHORT
+            ).show()
+        }
+    }
+
+    /** v1.0.16 (M8): generation token for the async blur background —
+     * a newer track change invalidates the previous blur job. */
+    private var blurGeneration = 0
+
+    /** v1.0.16 (F8): voice commands — microphone permission is asked
+     * just-in-time, only when the mic button is tapped. */
+    private var voiceSession: VoiceCommands.Session? = null
+    private val micPermissionLauncher = registerForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (granted) {
+            startVoiceListening()
+        } else {
+            Toast.makeText(this, R.string.voice_permission_denied, Toast.LENGTH_SHORT).show()
+        }
+    }
 
     private val pulseRunnable = object : Runnable {
         override fun run() {
@@ -208,6 +249,8 @@ class PlayerActivity : FullScreenActivity() {
         }
         binding.speedButton.setOnClickListener { cycleSpeed() }
         binding.sleepButton.setOnClickListener { showSleepDialog() }
+        // v1.0.16 (F8): voice commands (Darija + MSA).
+        binding.micButton.setOnClickListener { requestVoiceListening() }
         binding.abAButton.setOnClickListener {
             PlayerConnection.setA(PlayerConnection.currentPositionMs())
             updateAbStatus()
@@ -225,6 +268,26 @@ class PlayerActivity : FullScreenActivity() {
                 Toast.LENGTH_SHORT
             ).show()
         }
+        // v1.0.16 (F7): Auto-DJ — the app keeps the music going with
+        // similar songs. Enabling it with an empty queue starts a
+        // random song from the library.
+        binding.autoDjButton.setOnClickListener {
+            Haptics.tap(it, this)
+            val enabled = !AutoDj.isEnabled(this)
+            AutoDj.setEnabled(this, enabled)
+            if (enabled && (PlayerConnection.controller?.mediaItemCount ?: 0) == 0) {
+                val library = PlayerConnection.songs
+                if (library.isNotEmpty()) {
+                    PlayerConnection.playSongs(library, library.indices.random())
+                }
+            }
+            updateAutoDjButton()
+            Toast.makeText(
+                this,
+                if (enabled) R.string.auto_dj_on else R.string.auto_dj_off,
+                Toast.LENGTH_SHORT
+            ).show()
+        }
         // Standard / Pro mode (v1.0.10): one tap switches the mode; the
         // advanced tools row appears/disappears with a light animation.
         binding.modeToggleButton.setOnClickListener {
@@ -236,6 +299,8 @@ class PlayerActivity : FullScreenActivity() {
         binding.saveQueueButton.setOnClickListener { showSaveQueueDialog() }
         binding.queuesButton.setOnClickListener { showQueuesDialog() }
         binding.lyricsSearchOnline.setOnClickListener { loadLyricsForCurrent(forceOnline = true) }
+        // v1.0.16 (F5): star rating.
+        setupRatingStars()
 
         // Shared-element entry: the cover flew in from the mini player.
         if (intent.getBooleanExtra(TransitionHelper.EXTRA_SHARED_USED, false)) {
@@ -304,7 +369,11 @@ class PlayerActivity : FullScreenActivity() {
         }
         // Motion: slow Ken Burns zoom on the disc.
         if (motionStyle == MotionStyle.KEN_BURNS) {
-            TransitionHelper.applyKenBurns(binding.discCard)
+            // v1.0.16 (M12): keep the animator so onDestroy can cancel
+            // it — the old code dropped the returned ObjectAnimator, so
+            // the infinite zoom kept running (and holding the disc +
+            // activity) after the player was destroyed.
+            kenBurnsAnimator = TransitionHelper.applyKenBurns(binding.discCard)
         }
         // Theme colours: smoke ring + disc stroke follow the theme.
         val (accent, secondary) = ThemeColors.current(this)
@@ -347,6 +416,13 @@ class PlayerActivity : FullScreenActivity() {
         updateSleepButton()
         updateAbStatus()
         updatePlayOnceButton()
+        // v1.0.16 (F9): car mode — apply the current state and listen
+        // for Bluetooth connect/disconnect flips while open.
+        applyCarMode()
+        registerReceiver(
+            carModeReceiver,
+            android.content.IntentFilter(CarMode.ACTION_CAR_MODE_CHANGED)
+        )
         // Golden particles keep drifting while the player is open.
         if (binding.particlesView.visibility == View.VISIBLE) {
             binding.particlesView.setRunning(true)
@@ -358,6 +434,10 @@ class PlayerActivity : FullScreenActivity() {
 
     override fun onStop() {
         super.onStop()
+        try {
+            unregisterReceiver(carModeReceiver)
+        } catch (e: Exception) {
+        }
         PlayerConnection.removeVolumeListener(volumeSyncListener)
         VisualizerHub.listener = null
         PlayerConnection.controller?.removeListener(playerListener)
@@ -376,6 +456,15 @@ class PlayerActivity : FullScreenActivity() {
     override fun onDestroy() {
         discAnimator?.cancel()
         discAnimator = null
+        // v1.0.16 (F8): stop any voice listening session.
+        voiceSession?.stop()
+        voiceSession = null
+        // v1.0.16 (M12): stop the infinite Ken Burns zoom too, and reset
+        // the disc scale so a reused view does not stay zoomed.
+        kenBurnsAnimator?.cancel()
+        kenBurnsAnimator = null
+        binding.discCard.scaleX = 1f
+        binding.discCard.scaleY = 1f
         super.onDestroy()
     }
 
@@ -408,6 +497,8 @@ class PlayerActivity : FullScreenActivity() {
         updateShuffleRepeat()
         updateQueue()
         updateFavButton()
+        updateRatingStars()
+        updateAutoDjButton()
         updateDiscRotation()
         val volume = PlaybackStateStore.loadVolume(this)
         binding.volumeBar.progress = volume
@@ -415,6 +506,40 @@ class PlayerActivity : FullScreenActivity() {
         currentSpeed = PlayerConnection.controller?.playbackParameters?.speed ?: 1.0f
         binding.speedButton.text = formatSpeed(currentSpeed)
         loadLyricsForCurrent()
+    }
+
+    /** v1.0.16 (F5): star rating for the current song — filled gold up
+     * to the rating, outline above it. Tapping a star sets the rating;
+     * tapping the current rating again clears it. */
+    private fun updateRatingStars() {
+        val song = PlayerConnection.currentSong()
+        val rating = if (song != null) RatingStore.getRating(this, song.id) else 0
+        val stars = listOf(
+            binding.star1, binding.star2, binding.star3, binding.star4, binding.star5
+        )
+        val (accent, _) = ThemeColors.current(this)
+        stars.forEachIndexed { i, star ->
+            val filled = i < rating
+            star.setImageResource(
+                if (filled) R.drawable.ic_star_filled else R.drawable.ic_star
+            )
+            star.setColorFilter(if (filled) accent else getColor(R.color.zeno_ink3))
+        }
+    }
+
+    private fun setupRatingStars() {
+        val stars = listOf(
+            binding.star1, binding.star2, binding.star3, binding.star4, binding.star5
+        )
+        stars.forEachIndexed { i, star ->
+            star.setOnClickListener {
+                val song = PlayerConnection.currentSong() ?: return@setOnClickListener
+                val current = RatingStore.getRating(this, song.id)
+                val next = if (current == i + 1) 0 else i + 1
+                RatingStore.setRating(this, song.id, next)
+                updateRatingStars()
+            }
+        }
     }
 
     private fun updateSongInfo() {
@@ -498,6 +623,12 @@ class PlayerActivity : FullScreenActivity() {
             binding.playerBgDim.visibility = View.GONE
             return
         }
+        // v1.0.16 (M8): the trim + cover + blur scan every pixel of a
+        // screen-sized bitmap — it used to run on the main thread and
+        // froze the UI on every track change. Do the heavy work on a
+        // background thread; the generation token drops stale results
+        // when the user skips tracks quickly.
+        val generation = ++blurGeneration
         val size = android.graphics.Point()
         @Suppress("DEPRECATION")
         val display = windowManager.defaultDisplay
@@ -509,26 +640,34 @@ class PlayerActivity : FullScreenActivity() {
             2 -> 16
             else -> 10
         }
-        val prepared = try {
-            val trimmed = trimBlackBars(bitmap)
-            val covered = coverToScreen(trimmed, screenW, screenH)
-            if (trimmed !== bitmap) trimmed.recycle()
-            val blurred = blurBitmap(covered, blurFactor)
-            if (blurred !== covered) covered.recycle()
-            blurred
-        } catch (e: Exception) {
-            null
-        }
-        if (prepared == null) {
-            // Fall back to the raw cover (old behaviour) rather than no background.
-            binding.playerBg.scaleType = android.widget.ImageView.ScaleType.CENTER_CROP
-            binding.playerBg.setImageBitmap(bitmap)
-        } else {
-            binding.playerBg.scaleType = android.widget.ImageView.ScaleType.FIT_XY
-            binding.playerBg.setImageBitmap(prepared)
-        }
-        binding.playerBg.visibility = View.VISIBLE
-        binding.playerBgDim.visibility = View.VISIBLE
+        Thread {
+            val prepared = try {
+                val trimmed = trimBlackBars(bitmap)
+                val covered = coverToScreen(trimmed, screenW, screenH)
+                if (trimmed !== bitmap) trimmed.recycle()
+                val blurred = blurBitmap(covered, blurFactor)
+                if (blurred !== covered) covered.recycle()
+                blurred
+            } catch (e: Exception) {
+                null
+            }
+            runOnUiThread {
+                if (generation != blurGeneration || isFinishing) {
+                    prepared?.recycle()
+                    return@runOnUiThread
+                }
+                if (prepared == null) {
+                    // Fall back to the raw cover (old behaviour) rather than no background.
+                    binding.playerBg.scaleType = android.widget.ImageView.ScaleType.CENTER_CROP
+                    binding.playerBg.setImageBitmap(bitmap)
+                } else {
+                    binding.playerBg.scaleType = android.widget.ImageView.ScaleType.FIT_XY
+                    binding.playerBg.setImageBitmap(prepared)
+                }
+                binding.playerBg.visibility = View.VISIBLE
+                binding.playerBgDim.visibility = View.VISIBLE
+            }
+        }.start()
     }
 
     /** Trims near-black bars (letterbox / pillarbox) from a cover: rows
@@ -739,6 +878,11 @@ class PlayerActivity : FullScreenActivity() {
                 if (from == RecyclerView.NO_POSITION || to == RecyclerView.NO_POSITION) return false
                 val current = PlayerConnection.currentIndex()
                 PlayerConnection.controller?.moveMediaItem(current + 1 + from, current + 1 + to)
+                // v1.0.16 (M2): keep the queue list in sync with the
+                // controller's timeline, otherwise the next refresh
+                // rebuilds the list from the stale order and the drag
+                // appears to revert.
+                PlayerConnection.moveSong(current + 1 + from, current + 1 + to)
                 Collections.swap(upcomingSongs, from, to)
                 queueAdapter.notifyItemMoved(from, to)
                 return true
@@ -749,6 +893,8 @@ class PlayerActivity : FullScreenActivity() {
                 if (pos == RecyclerView.NO_POSITION) return
                 val current = PlayerConnection.currentIndex()
                 PlayerConnection.controller?.removeMediaItem(current + 1 + pos)
+                // v1.0.16 (M2): same — sync the list or the swipe reverts.
+                PlayerConnection.removeSongAt(current + 1 + pos)
                 upcomingSongs.removeAt(pos)
                 queueAdapter.submitList(upcomingSongs.toList())
                 Toast.makeText(this@PlayerActivity, R.string.removed_from_queue, Toast.LENGTH_SHORT).show()
@@ -883,6 +1029,34 @@ class PlayerActivity : FullScreenActivity() {
         }
     }
 
+    // ---- Car mode (v1.0.16, F9) ----
+
+    /** Car mode layout: big buttons, larger title, no distractions —
+     * the banner shows, the main controls grow, and the Pro sections
+     * (tools row, actions row, lyrics, queue) hide even in Pro mode.
+     * Leaving the car restores the normal layout. */
+    private fun applyCarMode() {
+        val car = CarMode.isActive(this)
+        binding.carModeBanner.visibility = if (car) View.VISIBLE else View.GONE
+        val scale = if (car) 1.25f else 1f
+        binding.playPauseButton.scaleX = scale
+        binding.playPauseButton.scaleY = scale
+        binding.previousButton.scaleX = scale
+        binding.previousButton.scaleY = scale
+        binding.nextButton.scaleX = scale
+        binding.nextButton.scaleY = scale
+        if (car) {
+            binding.toolsRow.visibility = View.GONE
+            binding.actionsRow.visibility = View.GONE
+            binding.lyricsSection.visibility = View.GONE
+            binding.queueSection.visibility = View.GONE
+            binding.songTitle.textSize = 30f
+        } else {
+            binding.songTitle.textSize = 27f
+            applyPlayerMode(animate = false)
+        }
+    }
+
     // ---- A-B repeat ----
     /** Standard / Pro mode (v1.0.10, extended in v1.0.11 and v1.0.12).
      * Pro reveals the advanced tools row (-10s, speed, A-B, play once)
@@ -892,6 +1066,10 @@ class PlayerActivity : FullScreenActivity() {
      * every feature stays reachable, only the rows hide. */
     private fun applyPlayerMode(animate: Boolean) {
         val pro = LuxuryPrefs.playerProMode(this)
+        // v1.0.16 (F9): in car mode the advanced sections stay hidden
+        // even in Pro mode — the toggle pill still shows the mode, but
+        // the rows do not come back until the car disconnects.
+        val showSections = pro && !CarMode.isActive(this)
         binding.modeToggleButton.text =
             getString(if (pro) R.string.player_mode_pro else R.string.player_mode_standard)
         binding.modeToggleButton.setBackgroundResource(
@@ -907,7 +1085,7 @@ class PlayerActivity : FullScreenActivity() {
             binding.queueSection
         )
         if (animate) {
-            if (pro) {
+            if (showSections) {
                 for (section in modeSections) {
                     section.visibility = View.VISIBLE
                     section.alpha = 0f
@@ -928,9 +1106,9 @@ class PlayerActivity : FullScreenActivity() {
             }
         } else {
             for (section in modeSections) {
-                section.visibility = if (pro) View.VISIBLE else View.GONE
+                section.visibility = if (showSections) View.VISIBLE else View.GONE
             }
-            if (pro) updateAbStatus() else binding.abStatus.visibility = View.GONE
+            if (showSections) updateAbStatus() else binding.abStatus.visibility = View.GONE
         }
     }
 
@@ -957,6 +1135,106 @@ class PlayerActivity : FullScreenActivity() {
         binding.playOnceButton.imageTintList = ColorStateList.valueOf(
             getColor(if (active) R.color.zeno_cyan else R.color.zeno_ink)
         )
+    }
+
+    /** v1.0.16 (F7): Auto-DJ chip — gold when on, plain when off. */
+    private fun updateAutoDjButton() {
+        val active = AutoDj.isEnabled(this)
+        binding.autoDjButton.setBackgroundResource(
+            if (active) R.drawable.bg_chip_selected else R.drawable.bg_chip
+        )
+        binding.autoDjButton.setTextColor(
+            getColor(if (active) R.color.zeno_on_gradient else R.color.zeno_ink)
+        )
+    }
+
+    // ---- Voice commands (v1.0.16, F8) ----
+
+    /** Mic button: explains why the microphone is needed, then asks
+     * for the permission just-in-time. */
+    private fun requestVoiceListening() {
+        if (ContextCompat.checkSelfPermission(
+                this, Manifest.permission.RECORD_AUDIO
+            ) == PackageManager.PERMISSION_GRANTED
+        ) {
+            startVoiceListening()
+            return
+        }
+        AlertDialog.Builder(this)
+            .setTitle(R.string.voice_permission_title)
+            .setMessage(R.string.voice_permission_message)
+            .setPositiveButton(R.string.voice_permission_allow) { _, _ ->
+                micPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+            }
+            .setNegativeButton(R.string.cancel, null)
+            .show()
+    }
+
+    private fun startVoiceListening() {
+        if (!VoiceCommands.isAvailable(this)) {
+            Toast.makeText(this, R.string.voice_unavailable, Toast.LENGTH_SHORT).show()
+            return
+        }
+        voiceSession?.stop()
+        voiceSession = VoiceCommands.Session(
+            activity = this,
+            onCommand = { command -> executeVoiceCommand(command) },
+            onUnrecognized = { heard ->
+                Toast.makeText(
+                    this,
+                    if (heard.isBlank()) getString(R.string.voice_not_understood)
+                    else getString(R.string.voice_not_understood_heard, heard),
+                    Toast.LENGTH_SHORT
+                ).show()
+            },
+            onUnavailable = {
+                Toast.makeText(this, R.string.voice_unavailable, Toast.LENGTH_SHORT).show()
+            }
+        )
+        voiceSession?.start()
+    }
+
+    private fun executeVoiceCommand(command: VoiceCommands.Command) {
+        when (command) {
+            is VoiceCommands.Command.Play -> {
+                if (!PlayerConnection.isPlaying()) PlayerConnection.togglePlayPause()
+            }
+            is VoiceCommands.Command.Pause -> PlayerConnection.pause()
+            is VoiceCommands.Command.Stop -> PlayerConnection.pause()
+            is VoiceCommands.Command.Next -> PlayerConnection.next()
+            is VoiceCommands.Command.Previous -> PlayerConnection.previous()
+            is VoiceCommands.Command.VolumeUp -> {
+                val volume = (PlaybackStateStore.loadVolume(this) + 10).coerceIn(0, 200)
+                PlayerConnection.setVolumePercent(volume, this)
+                binding.volumeBar.progress = volume
+                updateVolumeUi(volume)
+            }
+            is VoiceCommands.Command.VolumeDown -> {
+                val volume = (PlaybackStateStore.loadVolume(this) - 10).coerceIn(0, 200)
+                PlayerConnection.setVolumePercent(volume, this)
+                binding.volumeBar.progress = volume
+                updateVolumeUi(volume)
+            }
+            is VoiceCommands.Command.PlaySong -> {
+                val library = PlayerConnection.songs
+                val query = VoiceCommands.normalize(command.query)
+                val index = library.indexOfFirst { song ->
+                    val title = VoiceCommands.normalize(song.title)
+                    val artist = VoiceCommands.normalize(song.artist)
+                    title.contains(query) || artist.contains(query) ||
+                        query.contains(title)
+                }
+                if (index >= 0) {
+                    PlayerConnection.playSongs(library, index)
+                } else {
+                    Toast.makeText(
+                        this,
+                        getString(R.string.voice_song_not_found, command.query),
+                        Toast.LENGTH_SHORT
+                    ).show()
+                }
+            }
+        }
     }
 
     // ---- Lyrics ----
@@ -1077,12 +1355,28 @@ class PlayerActivity : FullScreenActivity() {
             Toast.makeText(this, R.string.no_saved_queues, Toast.LENGTH_SHORT).show()
             return
         }
+        // v1.0.16 (M1): the holder is filled by MainActivity's library
+        // load, but the player can also be opened straight from the
+        // widget / notification without it — then load the library here
+        // (off the main thread) instead of showing an empty queue.
+        val library = MusicRepositoryHolder.library
+        if (library.isEmpty()) {
+            Thread {
+                val loaded = MusicRepository.loadSongs(applicationContext)
+                MusicRepositoryHolder.library = loaded
+                runOnUiThread { showQueuesDialogWith(loaded, queues) }
+            }.start()
+            return
+        }
+        showQueuesDialogWith(library, queues)
+    }
+
+    private fun showQueuesDialogWith(library: List<Song>, queues: List<QueueStore.SavedQueue>) {
         val names = queues.map { "${it.name} (${it.songIds.size})" }.toTypedArray()
         AlertDialog.Builder(this)
             .setTitle(R.string.my_queues)
             .setItems(names) { _, which ->
                 val queue = queues[which]
-                val library = MusicRepositoryHolder.library
                 val songs = queue.songIds.mapNotNull { id -> library.find { it.id == id } }
                 if (songs.isEmpty()) {
                     Toast.makeText(this, R.string.queue_empty, Toast.LENGTH_SHORT).show()
