@@ -1,9 +1,7 @@
 package com.musicplayer.app.player
 
-import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
-import android.app.PendingIntent
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
@@ -16,13 +14,13 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.widget.Toast
-import androidx.core.app.NotificationCompat
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.PlaybackParameters
 import androidx.media3.common.Player
 import androidx.media3.common.TrackSelectionParameters
+import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.audio.AudioSink
@@ -33,6 +31,7 @@ import androidx.media3.session.MediaLibraryService.LibraryParams
 import androidx.media3.session.MediaLibraryService.MediaLibrarySession
 import androidx.media3.session.MediaSession
 import androidx.media3.session.SessionError
+import androidx.media3.session.SessionResult
 import com.google.common.collect.ImmutableList
 import com.google.common.util.concurrent.Futures
 import com.google.common.util.concurrent.ListenableFuture
@@ -57,7 +56,7 @@ import org.jaudiotagger.audio.AudioFileIO
  *   or when Media3 fails on a track, playback switches to VLC
  *   automatically, with no user action. While a VLC track plays, the
  *   visualizer shows its animated simulated waves and the notification is
- *   a custom one built here ([onUpdateNotification]).
+ *   a custom one built by [ZenoNotificationProvider].
  *
  * Also here: sleep timer with fade-out (enforced by the ticker), A–B
  * repeat, "play once then next", resume-state saving, play counts and
@@ -75,7 +74,7 @@ class PlaybackService : MediaLibraryService() {
         const val PLAYLISTS_ID = "playlists"
         const val FOLDERS_ID = "folders"
 
-        private const val NOTIFICATION_CHANNEL_ID = "zeno_playback"
+        internal const val NOTIFICATION_CHANNEL_ID = "zeno_playback"
         private const val SLEEP_FADE_MS = 10_000L
         private const val TICK_MS = 250L
         private const val SAVE_POSITION_EVERY_MS = 5_000L
@@ -522,7 +521,6 @@ class PlaybackService : MediaLibraryService() {
             plain.play()
         }
         session = MediaLibrarySession.Builder(this, plain, sessionCallback)
-            .setMediaNotificationProvider(ZenoNotificationProvider(this))
             .build()
         mainHandler.post {
             Toast.makeText(
@@ -579,77 +577,65 @@ class PlaybackService : MediaLibraryService() {
 
     private val sessionCallback = object : MediaLibrarySession.Callback {
         // -- Transport (VLC-aware) --
-        override fun onPlay(session: MediaSession, controller: MediaSession.ControllerInfo): Int {
-            return if (VlcEngine.active) {
-                VlcEngine.resume()
-                MediaSession.Callback.RESULT_SUCCESS
-            } else {
-                super.onPlay(session, controller)
-            }
-        }
-
-        override fun onPause(session: MediaSession, controller: MediaSession.ControllerInfo): Int {
-            return if (VlcEngine.active) {
-                VlcEngine.pause()
-                MediaSession.Callback.RESULT_SUCCESS
-            } else {
-                super.onPause(session, controller)
-            }
-        }
-
-        override fun onSeekTo(
+        // Media3 1.5 removed the per-command callbacks (onPlay, onPause,
+        // onSeekTo, onSkipToNext/Previous, onSetPlaybackSpeed) and replaced
+        // them with a single onPlayerCommandRequest gate: returning
+        // RESULT_SUCCESS lets the session run the command on the ExoPlayer,
+        // any other code blocks it. When VLC owns the current track, the
+        // VLC action is performed here and the ExoPlayer command is blocked
+        // (otherwise the paused ExoPlayer would start playing the same
+        // track a second time, i.e. double audio).
+        // Note: unlike the old callbacks, onPlayerCommandRequest receives
+        // no seek position and no speed value, so seek-in-track and speed
+        // from external controllers are handled by the app UI
+        // (VlcEngine.seekTo / VlcEngine.setRate) instead.
+        @Suppress("DEPRECATION")
+        override fun onPlayerCommandRequest(
             session: MediaSession,
             controller: MediaSession.ControllerInfo,
-            positionMs: Long
+            playerCommand: Int
         ): Int {
-            return if (VlcEngine.active) {
-                VlcEngine.seekTo(positionMs)
-                MediaSession.Callback.RESULT_SUCCESS
-            } else {
-                super.onSeekTo(session, controller, positionMs)
+            if (!VlcEngine.active) {
+                return super.onPlayerCommandRequest(session, controller, playerCommand)
             }
-        }
-
-        override fun onSkipToNext(session: MediaSession, controller: MediaSession.ControllerInfo): Int {
-            val exo = player ?: return MediaSession.Callback.RESULT_SUCCESS
-            if (VlcEngine.active) {
-                if (exo.hasNextMediaItem()) {
-                    exo.seekToNextMediaItem()
-                    exo.prepare()
-                    exo.play()
-                } else {
-                    VlcEngine.stop()
-                    exo.pause()
+            val exo = player
+            when (playerCommand) {
+                Player.COMMAND_PLAY_PAUSE -> {
+                    if (VlcEngine.isPlaying) VlcEngine.pause() else VlcEngine.resume()
                 }
-                return MediaSession.Callback.RESULT_SUCCESS
-            }
-            return super.onSkipToNext(session, controller)
-        }
-
-        override fun onSkipToPrevious(session: MediaSession, controller: MediaSession.ControllerInfo): Int {
-            val exo = player ?: return MediaSession.Callback.RESULT_SUCCESS
-            if (VlcEngine.active) {
-                if (exo.currentPosition > 3000) {
-                    VlcEngine.seekTo(0)
-                } else if (exo.hasPreviousMediaItem()) {
-                    exo.seekToPreviousMediaItem()
-                    exo.prepare()
-                    exo.play()
-                } else {
-                    VlcEngine.stop()
+                Player.COMMAND_SEEK_TO_NEXT, Player.COMMAND_SEEK_TO_NEXT_MEDIA_ITEM -> {
+                    if (exo == null) return SessionResult.RESULT_ERROR_INVALID_STATE
+                    if (exo.hasNextMediaItem()) {
+                        exo.seekToNextMediaItem()
+                        exo.prepare()
+                        exo.play()
+                    } else {
+                        VlcEngine.stop()
+                        exo.pause()
+                    }
                 }
-                return MediaSession.Callback.RESULT_SUCCESS
+                Player.COMMAND_SEEK_TO_PREVIOUS, Player.COMMAND_SEEK_TO_PREVIOUS_MEDIA_ITEM -> {
+                    if (exo == null) return SessionResult.RESULT_ERROR_INVALID_STATE
+                    if (exo.currentPosition > 3000) {
+                        VlcEngine.seekTo(0)
+                    } else if (exo.hasPreviousMediaItem()) {
+                        exo.seekToPreviousMediaItem()
+                        exo.prepare()
+                        exo.play()
+                    } else {
+                        VlcEngine.stop()
+                    }
+                }
+                Player.COMMAND_SEEK_IN_CURRENT_MEDIA_ITEM,
+                Player.COMMAND_SET_SPEED_AND_PITCH -> {
+                    // No position/speed is passed to this callback in
+                    // Media3 1.5: the value is applied by the app UI
+                    // instead. Block the ExoPlayer command so the two
+                    // engines don't desync.
+                }
+                else -> return super.onPlayerCommandRequest(session, controller, playerCommand)
             }
-            return super.onSkipToPrevious(session, controller)
-        }
-
-        override fun onSetPlaybackSpeed(
-            session: MediaSession,
-            controller: MediaSession.ControllerInfo,
-            speed: Float
-        ): Int {
-            VlcEngine.setRate(speed)
-            return super.onSetPlaybackSpeed(session, controller, speed)
+            return SessionResult.RESULT_ERROR_INVALID_STATE
         }
 
         override fun onAddMediaItems(
@@ -816,56 +802,6 @@ class PlaybackService : MediaLibraryService() {
         }
     }
 
-    // ---- Custom VLC notification --------------------------------------------
-
-    override fun onUpdateNotification(session: MediaSession): Notification? {
-        if (!VlcEngine.active) {
-            return super.onUpdateNotification(session)
-        }
-        val song = PlayerConnection.currentSong() ?: return super.onUpdateNotification(session)
-        val playing = VlcEngine.isPlaying
-        val toggleIntent = PendingIntent.getBroadcast(
-            this, 0,
-            Intent(this, VlcActionReceiver::class.java).setAction(VlcActionReceiver.ACTION_TOGGLE),
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
-        val prevIntent = PendingIntent.getBroadcast(
-            this, 1,
-            Intent(this, VlcActionReceiver::class.java).setAction(VlcActionReceiver.ACTION_PREV),
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
-        val nextIntent = PendingIntent.getBroadcast(
-            this, 2,
-            Intent(this, VlcActionReceiver::class.java).setAction(VlcActionReceiver.ACTION_NEXT),
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
-        val closeIntent = PendingIntent.getBroadcast(
-            this, 3,
-            Intent(this, VlcActionReceiver::class.java).setAction(VlcActionReceiver.ACTION_CLOSE),
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
-        return NotificationCompat.Builder(this, NOTIFICATION_CHANNEL_ID)
-            .setSmallIcon(R.drawable.ic_music)
-            .setContentTitle(song.title)
-            .setContentText(song.artist)
-            .setSubText(getString(R.string.app_name))
-            .setOngoing(true)
-            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
-            .setStyle(
-                androidx.media.app.NotificationCompat.MediaStyle()
-                    .setShowActionsInCompactView(0, 1, 2)
-            )
-            .addAction(R.drawable.ic_previous, getString(R.string.previous), prevIntent)
-            .addAction(
-                if (playing) R.drawable.ic_pause else R.drawable.ic_play,
-                getString(if (playing) R.string.pause else R.string.play),
-                toggleIntent
-            )
-            .addAction(R.drawable.ic_next, getString(R.string.next), nextIntent)
-            .addAction(R.drawable.ic_close, getString(R.string.close), closeIntent)
-            .build()
-    }
-
     private fun createNotificationChannel() {
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -939,9 +875,14 @@ class PlaybackService : MediaLibraryService() {
         }
     }
 
+    @OptIn(UnstableApi::class)
     override fun onCreate() {
         super.onCreate()
         createNotificationChannel()
+        // Media3 1.5: the notification provider is set on the service
+        // (not on the session Builder anymore) and must be set before
+        // onCreate() returns; it survives session rebuilds.
+        setMediaNotificationProvider(ZenoNotificationProvider(this))
         VlcEngine.init(applicationContext)
         VlcEngine.listener = vlcListener
         // v1.0.3: the service must never die at startup. If the spectrum
@@ -960,7 +901,6 @@ class PlaybackService : MediaLibraryService() {
                 player = ExoPlayer.Builder(this).build()
                 player?.addListener(playerListener)
                 session = MediaLibrarySession.Builder(this, player!!, sessionCallback)
-                    .setMediaNotificationProvider(ZenoNotificationProvider(this))
                     .build()
             } catch (e2: Exception) {
                 ErrorReporter.log(
@@ -1038,7 +978,6 @@ class PlaybackService : MediaLibraryService() {
             .build()
         player?.addListener(playerListener)
         session = MediaLibrarySession.Builder(this, player!!, sessionCallback)
-            .setMediaNotificationProvider(ZenoNotificationProvider(this))
             .build()
     }
 
