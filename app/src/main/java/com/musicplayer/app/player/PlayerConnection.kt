@@ -83,6 +83,12 @@ object PlayerConnection {
         sleepEndAtMs = 0L
         sleepSongsRemaining = 0
         sleepFadeFactor = 1.0f
+        // v1.0.14: cancelling mid-fade used to leave the player's volume
+        // lowered until the user moved the slider — the fade factor was
+        // reset here but the service's player.volume was not. Restore
+        // full volume now (the service's applyFadeFactor(1.0f)).
+        controller?.volume = VolumeBoost.playerVolume()
+        VlcEngine.setVolume(VolumeBoost.vlcVolumePercent(VolumeBoost.volumePercent, 1.0f))
     }
 
     /** Remaining sleep time in ms (minutes mode), -1 when not applicable. */

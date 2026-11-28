@@ -37,9 +37,15 @@ import com.musicplayer.app.ui.LuxuryPrefs
  *   COMMAND_SEEK_TO_NEXT_MEDIA_ITEM only when hasNextMediaItem() is
  *   true), so on the last song of a queue — or a single-song queue —
  *   the notification showed only Previous + Pause. The custom actions
- *   below call PlayerConnection directly, so Next is always there and
- *   always runs the same logic as the player's Next button (including
- *   the "play once then next" mode).
+ *   below call the service directly, so Next is always there and always
+ *   runs the same logic as the player's Next button (including the
+ *   "play once then next" mode).
+ * - v1.0.14: the three playback buttons go to the service itself
+ *   ([PlaybackService.ACTION_NOTIFICATION_PREV/TOGGLE/NEXT]) instead of
+ *   broadcasts to [VlcActionReceiver] — the broadcast path ran through
+ *   the activity's MediaController, which is dead once the app UI is
+ *   closed, so the buttons went silently dead. The receiver stays as a
+ *   fallback for notifications posted by older versions.
  * - The notification is ongoing: it can never be swiped away, while
  *   playing AND while paused. Only the X button closes it (see
  *   [PlaybackService.ACTION_CLOSE_NOTIFICATION]).
@@ -96,7 +102,7 @@ class ZenoNotificationProvider(context: Context) : MediaNotification.Provider {
         extras: Bundle
     ): Boolean {
         // No Media3 custom actions are used (all buttons are plain
-        // broadcasts / a service intent): let the session handle it.
+        // service intents): let the session handle it.
         return false
     }
 
@@ -127,17 +133,17 @@ class ZenoNotificationProvider(context: Context) : MediaNotification.Provider {
             .addAction(
                 R.drawable.ic_previous,
                 appContext.getString(R.string.previous),
-                broadcastIntent(VlcActionReceiver.ACTION_PREV, 1)
+                serviceIntent(PlaybackService.ACTION_NOTIFICATION_PREV, 1)
             )
             .addAction(
                 if (playing) R.drawable.ic_pause else R.drawable.ic_play,
                 appContext.getString(if (playing) R.string.pause else R.string.play),
-                broadcastIntent(VlcActionReceiver.ACTION_TOGGLE, 0)
+                serviceIntent(PlaybackService.ACTION_NOTIFICATION_TOGGLE, 0)
             )
             .addAction(
                 R.drawable.ic_next,
                 appContext.getString(R.string.next),
-                broadcastIntent(VlcActionReceiver.ACTION_NEXT, 2)
+                serviceIntent(PlaybackService.ACTION_NOTIFICATION_NEXT, 2)
             )
             .addAction(
                 R.drawable.ic_close,
@@ -164,10 +170,12 @@ class ZenoNotificationProvider(context: Context) : MediaNotification.Provider {
         return builder.build()
     }
 
-    private fun broadcastIntent(action: String, requestCode: Int): PendingIntent =
-        PendingIntent.getBroadcast(
+    /** Playback buttons: handled by the service itself (v1.0.14) so they
+     * work even when the app UI is destroyed. */
+    private fun serviceIntent(action: String, requestCode: Int): PendingIntent =
+        PendingIntent.getService(
             appContext, requestCode,
-            Intent(appContext, VlcActionReceiver::class.java).setAction(action),
+            Intent(appContext, PlaybackService::class.java).setAction(action),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 

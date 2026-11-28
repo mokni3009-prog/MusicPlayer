@@ -87,6 +87,25 @@ class PlaybackService : MediaLibraryService() {
         /** Notification X button: stop playback, dismiss the notification
          * and stop the foreground service (handled in onStartCommand). */
         const val ACTION_CLOSE_NOTIFICATION = "com.musicplayer.app.CLOSE_NOTIFICATION"
+
+        /** Notification buttons (v1.0.14): previous / play-pause / next,
+         * handled directly by the service in onStartCommand so they work
+         * even when the app UI is destroyed. The old broadcast path
+         * (VlcActionReceiver -> the activity's MediaController) dies with
+         * the activity, which is why the buttons went silently dead. */
+        const val ACTION_NOTIFICATION_PREV = "com.musicplayer.app.NOTIFICATION_PREV"
+        const val ACTION_NOTIFICATION_TOGGLE = "com.musicplayer.app.NOTIFICATION_TOGGLE"
+        const val ACTION_NOTIFICATION_NEXT = "com.musicplayer.app.NOTIFICATION_NEXT"
+
+        /**
+         * Whether the CURRENT ExoPlayer was built with the custom
+         * renderers factory (spectrum + gain stage). Null = no player has
+         * been built yet in this process. Set wherever a player is built;
+         * read by the self-test "volume-boost" check.
+         */
+        @Volatile
+        var gainStageActive: Boolean? = null
+
         private const val SLEEP_FADE_MS = 10_000L
         private const val TICK_MS = 250L
         private const val SAVE_POSITION_EVERY_MS = 5_000L
@@ -432,7 +451,7 @@ class PlaybackService : MediaLibraryService() {
             )
             if (!fallbackActive) {
                 fallbackActive = true
-                rebuildWithPlainPlayer()
+                rebuildPlayerWithFactory()
             }
         }
     }
@@ -510,13 +529,16 @@ class PlaybackService : MediaLibraryService() {
     }
 
     /**
-     * Rebuilds the player with plain defaults and retries playback from the
-     * same queue and position (v1.0.3 fallback). The media session is
-     * rebuilt too, so connected controllers get onDisconnected and reconnect.
+     * Rebuilds the player and retries playback from the same queue and
+     * position (v1.0.3 fallback). The media session is rebuilt too, so
+     * connected controllers get onDisconnected and reconnect. v1.0.14:
+     * the rebuilt player uses the SAME spectrum + gain renderers factory
+     * as the normal build — a plain rebuild dropped the gain stage, so
+     * the 200% boost silently stopped working after any playback error.
      */
-    private fun rebuildWithPlainPlayer() {
+    private fun rebuildPlayerWithFactory() {
         try {
-            rebuildWithPlainPlayerInner()
+            rebuildPlayerWithFactoryInner()
         } catch (e: Exception) {
             ErrorReporter.log(
                 ErrorReporter.TYPE_PLAYBACK,
@@ -526,7 +548,7 @@ class PlaybackService : MediaLibraryService() {
         }
     }
 
-    private fun rebuildWithPlainPlayerInner() {
+    private fun rebuildPlayerWithFactoryInner() {
         val old = player ?: return
         val items = (0 until old.mediaItemCount).map { old.getMediaItemAt(it) }
         val index = old.currentMediaItemIndex.coerceAtLeast(0)
@@ -537,7 +559,10 @@ class PlaybackService : MediaLibraryService() {
         session?.release()
         old.release()
         releaseVisualizer()
-        player = ExoPlayer.Builder(this).build()
+        player = ExoPlayer.Builder(this)
+            .setRenderersFactory(buildRenderersFactory())
+            .build()
+        gainStageActive = true
         val plain = player!!
         plain.addListener(playerListener)
         // v1.0.9: re-attach EQ/Reverb/Visualizer to the NEW player's session
@@ -879,6 +904,25 @@ class PlaybackService : MediaLibraryService() {
             closeFromNotification()
             return super.onStartCommand(intent, flags, startId)
         }
+        // Notification buttons (v1.0.14): handled here, directly on the
+        // service's own player + VLC engine, so they work even when the
+        // app UI is destroyed (the activity's MediaController is dead
+        // then — that was the silent failure). VlcActionReceiver stays
+        // as a fallback for notifications posted by older versions.
+        when (intent?.action) {
+            ACTION_NOTIFICATION_PREV -> {
+                handleNotificationPrevious()
+                return super.onStartCommand(intent, flags, startId)
+            }
+            ACTION_NOTIFICATION_TOGGLE -> {
+                handleNotificationToggle()
+                return super.onStartCommand(intent, flags, startId)
+            }
+            ACTION_NOTIFICATION_NEXT -> {
+                handleNotificationNext()
+                return super.onStartCommand(intent, flags, startId)
+            }
+        }
         // Alarm stop (from the alarm notification or the ringing screen).
         if (intent?.action == AlarmStore.ACTION_STOP_ALARM) {
             stopAlarm()
@@ -940,6 +984,132 @@ class PlaybackService : MediaLibraryService() {
         try {
             stopSelf()
         } catch (e: Exception) {
+        }
+    }
+
+    // ---- Notification buttons, handled by the service itself (v1.0.14) ----
+    // Same logic as PlayerConnection.next()/previous()/togglePlayPause()
+    // (including the 3000 ms rule and VLC-track handling), but driven by
+    // the service's own player instead of the activity's MediaController —
+    // so the buttons work when the app UI is closed or destroyed. A
+    // failure that cannot be executed is reported (TYPE_ERROR) instead
+    // of failing silently, as it did before.
+
+    private fun handleNotificationToggle() {
+        try {
+            if (VlcEngine.active) {
+                VlcEngine.toggle()
+                return
+            }
+            val exo = player
+            if (exo == null || exo.mediaItemCount == 0) {
+                ErrorReporter.log(
+                    ErrorReporter.TYPE_ERROR,
+                    "Notification play/pause ignored: no player or empty queue"
+                )
+                return
+            }
+            if (exo.isPlaying) {
+                exo.pause()
+            } else {
+                // After a stop the player is idle (and after the last
+                // track it is ended): play() alone does nothing then.
+                when (exo.playbackState) {
+                    Player.STATE_IDLE -> exo.prepare()
+                    Player.STATE_ENDED -> exo.seekTo(0)
+                }
+                exo.play()
+            }
+        } catch (e: Exception) {
+            ErrorReporter.log(
+                ErrorReporter.TYPE_ERROR,
+                "Notification play/pause failed: ${e.message}",
+                e
+            )
+        }
+    }
+
+    private fun handleNotificationNext() {
+        try {
+            val exo = player
+            if (exo == null) {
+                ErrorReporter.log(
+                    ErrorReporter.TYPE_ERROR,
+                    "Notification next ignored: no player"
+                )
+                return
+            }
+            if (VlcEngine.active) {
+                // Move the session queue; the service routes the next
+                // track (Media3 or VLC) on the transition.
+                if (exo.hasNextMediaItem()) {
+                    exo.seekToNextMediaItem()
+                    exo.prepare()
+                    exo.play()
+                } else {
+                    VlcEngine.stop()
+                    exo.pause()
+                }
+                return
+            }
+            if (exo.mediaItemCount == 0) {
+                ErrorReporter.log(
+                    ErrorReporter.TYPE_ERROR,
+                    "Notification next ignored: empty queue"
+                )
+                return
+            }
+            if (exo.hasNextMediaItem()) exo.seekToNextMediaItem() else exo.seekTo(0)
+        } catch (e: Exception) {
+            ErrorReporter.log(
+                ErrorReporter.TYPE_ERROR,
+                "Notification next failed: ${e.message}",
+                e
+            )
+        }
+    }
+
+    private fun handleNotificationPrevious() {
+        try {
+            val exo = player
+            if (exo == null) {
+                ErrorReporter.log(
+                    ErrorReporter.TYPE_ERROR,
+                    "Notification previous ignored: no player"
+                )
+                return
+            }
+            // The 3000 ms rule: restart the track when past the start,
+            // otherwise go to the previous track.
+            val position = if (VlcEngine.active) VlcEngine.positionMs else exo.currentPosition
+            if (position > 3000) {
+                if (VlcEngine.active) VlcEngine.seekTo(0) else exo.seekTo(0)
+                return
+            }
+            if (VlcEngine.active) {
+                if (exo.hasPreviousMediaItem()) {
+                    exo.seekToPreviousMediaItem()
+                    exo.prepare()
+                    exo.play()
+                } else {
+                    VlcEngine.stop()
+                }
+                return
+            }
+            if (exo.mediaItemCount == 0) {
+                ErrorReporter.log(
+                    ErrorReporter.TYPE_ERROR,
+                    "Notification previous ignored: empty queue"
+                )
+                return
+            }
+            exo.seekToPreviousMediaItem()
+        } catch (e: Exception) {
+            ErrorReporter.log(
+                ErrorReporter.TYPE_ERROR,
+                "Notification previous failed: ${e.message}",
+                e
+            )
         }
     }
 
@@ -1111,6 +1281,9 @@ class PlaybackService : MediaLibraryService() {
             )
             try {
                 player = ExoPlayer.Builder(this).build()
+                // Last-resort plain player: no spectrum, no gain stage
+                // (the boost cannot work on this player).
+                gainStageActive = false
                 player?.addListener(playerListener)
                 session = MediaLibrarySession.Builder(this, player!!, sessionCallback)
                     .build()
@@ -1164,11 +1337,17 @@ class PlaybackService : MediaLibraryService() {
         mainHandler.post(ticker)
     }
 
-    private fun buildPlayerWithSpectrum() {
-        // Media3 1.4.1 has no ExoPlayer.Builder.setAudioProcessors: the audio
-        // processors are attached through a DefaultAudioSink built by a custom
-        // DefaultRenderersFactory.
-        val renderersFactory = object : DefaultRenderersFactory(this) {
+    /**
+     * The custom renderers factory (v1.0.14): the audio chain runs through
+     * the spectrum processor (live waves) and then the gain processor
+     * (200% boost, ReplayGain, balance, mono). Shared by the normal build
+     * and the fallback rebuild — the fallback used to build a plain player
+     * WITHOUT this factory, so after any playback error the 200% boost
+     * was stored (boostGain = 2.0) but never applied: the slider showed
+     * 200% while the sound stayed at 100%.
+     */
+    private fun buildRenderersFactory(): DefaultRenderersFactory {
+        return object : DefaultRenderersFactory(this) {
             override fun buildAudioSink(
                 context: Context,
                 enableFloatOutput: Boolean,
@@ -1185,9 +1364,16 @@ class PlaybackService : MediaLibraryService() {
                     .build()
             }
         }
+    }
+
+    private fun buildPlayerWithSpectrum() {
+        // Media3 1.4.1 has no ExoPlayer.Builder.setAudioProcessors: the audio
+        // processors are attached through a DefaultAudioSink built by a custom
+        // DefaultRenderersFactory.
         player = ExoPlayer.Builder(this)
-            .setRenderersFactory(renderersFactory)
+            .setRenderersFactory(buildRenderersFactory())
             .build()
+        gainStageActive = true
         // Media3 1.4.1 has no ExoPlayer.Builder.setAudioOffloadPreferences:
         // offload is disabled through the track selection parameters, so the
         // PCM always flows through the in-app spectrum processor.
@@ -1230,6 +1416,7 @@ class PlaybackService : MediaLibraryService() {
         player?.release()
         session = null
         player = null
+        gainStageActive = null
         super.onDestroy()
     }
 

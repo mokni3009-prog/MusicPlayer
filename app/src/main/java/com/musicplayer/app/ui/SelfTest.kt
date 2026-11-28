@@ -19,10 +19,12 @@ import com.musicplayer.app.data.QueueStore
 import com.musicplayer.app.data.Song
 import com.musicplayer.app.player.EqManager
 import com.musicplayer.app.player.LyricsManager
+import com.musicplayer.app.player.PlaybackService
 import com.musicplayer.app.player.PlayerConnection
 import com.musicplayer.app.player.ReverbManager
 import com.musicplayer.app.player.VisualizerHub
 import com.musicplayer.app.player.VlcEngine
+import com.musicplayer.app.player.VolumeBoost
 import com.musicplayer.app.report.ErrorReporter
 import com.musicplayer.app.update.UpdateChecker
 import com.musicplayer.app.widget.ZenoWidgetProvider
@@ -177,6 +179,42 @@ object SelfTest {
             }
         } catch (e: Exception) {
             results += CheckResult("equalizer", Status.FAIL, e.message ?: "error")
+        }
+
+        // ---- Volume boost (200%): the gain stage must survive a fallback
+        // rebuild (v1.0.14). Before the fix, a playback error rebuilt the
+        // player WITHOUT the gain processor: boostGain was 2.0 in memory
+        // but nothing read it, so the slider showed 200% while the sound
+        // stayed at 100%. The check sets 200% in memory only (no device
+        // volume change), verifies the gain value AND that the active
+        // player was built with the gain stage, then restores the value.
+        onProgress("volume-boost")
+        try {
+            val savedPercent = VolumeBoost.volumePercent
+            VolumeBoost.setVolumePercent(200)
+            val boostAt200 = VolumeBoost.boostGain
+            val stage = PlaybackService.gainStageActive
+            VolumeBoost.setVolumePercent(savedPercent)
+            results += when {
+                stage == null -> CheckResult(
+                    "volume-boost", Status.SKIP,
+                    "no player built yet — play a song, then re-run the test"
+                )
+                boostAt200 != 2.0f -> CheckResult(
+                    "volume-boost", Status.FAIL,
+                    "boostGain is $boostAt200 at 200%, expected 2.0"
+                )
+                stage == false -> CheckResult(
+                    "volume-boost", Status.FAIL,
+                    "active player built WITHOUT the gain stage (boost is fake)"
+                )
+                else -> CheckResult(
+                    "volume-boost", Status.PASS,
+                    "boostGain 2.0 at 200% and the active player has the gain stage"
+                )
+            }
+        } catch (e: Exception) {
+            results += CheckResult("volume-boost", Status.FAIL, e.message ?: "error")
         }
 
         // ---- Formats: Media3 (primary) + VLC (fallback) ----

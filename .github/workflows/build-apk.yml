@@ -91,15 +91,13 @@ jobs:
       - name: Publish release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v1.0.13
-          name: Zeno Play v1.0.13
+          tag_name: v1.0.14
+          name: Zeno Play v1.0.14
           body: |
-            Zeno Play v1.0.13 — the alarm is now a full alarm app inside the app (two apps in one), built on the approved design 3 + "Nouvelle alarme" sheet.
+            Zeno Play v1.0.14 — two bug fixes, no new features.
 
-            - NEW (ALARME tab): a new ALARME tab in the library top bar (CHANSONS / ALBUMS / ARTISTES / PLAYLISTS / ALARME) opens the alarm app: a big live clock + date, a glowing "Prochaine alarme" card (time, name, "dans 8 h 15" countdown, on/off toggle) and a compact list of the other alarms. The + button opens the approved "Nouvelle alarme" sheet: big 07:00 time picker with chevrons, name, repeat days (Lun–Dim), song picker ("Choisir" opens the library), "Volume progressif" toggle, Annuler / Enregistrer. The same sheet edits an existing alarm (tap it) and deletes it ("Supprimer" with confirmation).
-            - NEW (multiple alarms): as many alarms as wanted, each with its own time, name, repeat days (or once only), song and gradual volume, each with its own on/off toggle.
-            - NEW (real alarm): when the time comes, a high-priority alarm notification appears (alarm name + song) with a clear "Arrêter" button and a full-screen ringing screen over the lock screen — and the chosen song plays, even with the app closed (exact AlarmManager alarm + foreground playback service; on Android 12+ the system exact-alarm permission is requested, with an inexact fallback). A one-time alarm disables itself after ringing; a repeating alarm re-schedules its next occurrence. Alarms survive a phone reboot (BOOT_COMPLETED re-schedules them). An old single alarm from v1.0.4–v1.0.12 is migrated automatically on first launch.
-            - REMOVED: the alarm is gone from the settings tab entirely (the settings section title was updated too).
+            - FIX (notification buttons): the previous / play-pause / next buttons in the playback notification now work even when the app UI is closed. They used to go through the activity's MediaController, which dies with the activity — the buttons are now handled directly by the playback service (same as the X button), using the service's own player + VLC engine. Failures are now reported to the error server instead of failing silently.
+            - FIX (real 200% volume): the volume slider showed 200% but the sound stayed at 100% after any playback error. The fallback player rebuild used to build a plain player without the gain stage, so the boost gain was stored but never applied. The rebuild now uses the same spectrum + gain renderers factory as the normal player, so the 200% boost (+6 dB) survives any playback error. New self-test check "volume-boost" verifies it. Also fixed: cancelling the sleep timer mid-fade now restores full volume immediately (it used to stay lowered until the slider was moved).
 
-            Installs over v1.0.12 normally (same release key, no uninstall needed).
+            Installs over v1.0.13 normally (same release key, no uninstall needed).
           files: app/build/outputs/apk/release/*.apk
