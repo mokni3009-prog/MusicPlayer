@@ -38,6 +38,7 @@ import com.musicplayer.app.data.FavoritesStore
 import com.musicplayer.app.data.PlaybackStateStore
 import com.musicplayer.app.data.QueueStore
 import com.musicplayer.app.data.Song
+import com.google.android.material.transition.platform.MaterialContainerTransformSharedElementCallback
 import com.musicplayer.app.databinding.ActivityPlayerBinding
 import com.musicplayer.app.player.LyricsManager
 import com.musicplayer.app.player.PlaybackService
@@ -134,6 +135,11 @@ class PlayerActivity : FullScreenActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // Required glue for the MaterialContainerTransform shared-element
+        // transition (v1.0.6 fix): without this callback the library never
+        // tags the snapshot views, and the container transform crashes the
+        // app when opening the full player.
+        setEnterSharedElementCallback(MaterialContainerTransformSharedElementCallback())
         binding = ActivityPlayerBinding.inflate(layoutInflater)
         setContentView(binding.root)
 

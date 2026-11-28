@@ -70,7 +70,7 @@ jobs:
       - name: Rename APKs (ZenoPlay-v<version>-<abi>.apk)
         # The downloaded file must be named after the app + version, not
         # app-release.apk. The version is read from build.gradle.kts so
-        # future releases are named automatically (e.g. ZenoPlay-v1.0.5.apk).
+        # future releases are named automatically (e.g. ZenoPlay-v1.0.6.apk).
         # ABI splits produce one APK per architecture, so the ABI stays in
         # the name to keep the four files distinct.
         run: |
@@ -91,14 +91,17 @@ jobs:
       - name: Publish release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v1.0.5
-          name: Zeno Play v1.0.5
+          tag_name: v1.0.6
+          name: Zeno Play v1.0.6
           body: |
-            Zeno Play v1.0.5 — bugfix release (signed with the permanent release key).
+            Zeno Play v1.0.6 — bugfix release (signed with the permanent release key).
 
-            - FIXED: empty library on Android 9 and below — the MediaStore query asked for bucket_display_name, a column that only exists from API 29, so the whole scan failed and the library came back empty (0 chansons). The column is now requested only on API 29+, and the folder name is derived from the file path on older versions; both ways live in the same code, and if any column is still missing the scan retries with a minimal projection instead of returning empty.
-            - FIXED: playback crash ERROR_CODE_FAILED_RUNTIME_CHECK (1004) — the spectrum/gain audio processors could put() Media3's shared empty buffer into itself after a reset, which throws IllegalArgumentException and kills playback. Empty buffers are now skipped safely.
+            - FIXED: full-player crash on open (IllegalArgumentException: android:id/content is not a valid ancestor, in MaterialContainerTransform.createAnimator). Root cause: the shared view handed to the scene transition was the inner ImageView while the transitionName lived on its parent card, and neither activity set the MaterialContainerTransformSharedElementCallback the library requires. The launch now passes the card that carries the transitionName, both activities set the callback, and the transform itself is guarded so it can never crash the app again (the other shared-element motions still fly the cover). All 22 motion styles were audited — every animation resource and label exists and every path is guarded.
+            - FIXED: volume slider barely changed the loudness (only 0% muted) and the 200% boost felt fake. The 0..100% range was linear amplitude (-6 dB at 50%), so it is now a perceptual square-law curve that feels graduated across the whole travel. The 200% boost used a plain tanh limiter that squashed loud tracks; it now has a knee limiter (linear below 0.9, rounded only above it), so 200% is a real +6 dB. The service also re-applies the slider volume when switching back from VLC to ExoPlayer and after a fallback player rebuild, where the setting used to be silently lost.
+            - FIXED: Settings popups (sleep timer, waveform shape, motion type…) showed as plain grey Android boxes. Every popup menu and dialog in the app now uses the Zeno identity (dark navy background, gold accents, cream text, rounded corners) via the app theme.
+            - CHANGED: the "free forever · no ads · privacy respected" line now appears ONLY on the splash screen; it was removed from the main header and from Settings. The splash itself is unchanged (3 seconds, animated logo, the three promises).
+            - FIXED: in the full player, the repeat-one "1" badge hung below the repeat button, outside its bounds. It is now a small gold badge chip inside the button box (top-right corner), same on the Now Playing card.
             - No new features in this version.
 
-            Installs over v1.0.4 normally (same release key, no uninstall needed).
+            Installs over v1.0.5 normally (same release key, no uninstall needed).
           files: app/build/outputs/apk/release/*.apk

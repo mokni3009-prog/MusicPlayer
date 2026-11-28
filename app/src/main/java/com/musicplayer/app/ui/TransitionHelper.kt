@@ -19,6 +19,8 @@ import android.transition.ChangeBounds
 import android.transition.ChangeImageTransform
 import android.transition.ChangeTransform
 import android.transition.TransitionSet
+import android.transition.TransitionValues
+import android.view.ViewGroup
 
 /**
  * Applies the chosen navigation motion style to every activity launch
@@ -35,6 +37,54 @@ object TransitionHelper {
     const val EXTRA_REVEAL_X = "zeno_reveal_x"
     const val EXTRA_REVEAL_Y = "zeno_reveal_y"
 
+    /**
+     * MaterialContainerTransform that can never crash the app.
+     *
+     * Root cause of the v1.0.5 full-player crash
+     * (IllegalArgumentException: android:id/content is not a valid ancestor,
+     * in MaterialContainerTransform.createAnimator): the platform transform
+     * resolves its drawing view with TransitionUtils.findAncestorById(…,
+     * android.R.id.content), which throws when the view handed to it does
+     * not sit under android:id/content — e.g. a snapshot/ghost view living
+     * in the window overlay instead of the activity hierarchy. The real
+     * fix is the correct wiring (the shared view is the container that
+     * carries the transitionName, and both activities set the
+     * MaterialContainerTransformSharedElementCallback); this subclass is
+     * the last-resort guard: if the framework ever hands the transform
+     * an unusable view again, this child contributes no animator instead
+     * of killing the app — the ChangeBounds / ChangeTransform /
+     * ChangeImageTransform children still fly the cover, so the user
+     * still sees a real shared-element motion, never a crash.
+     */
+    class SafeContainerTransform : MaterialContainerTransform() {
+        override fun createAnimator(
+            sceneRoot: ViewGroup,
+            startValues: TransitionValues?,
+            endValues: TransitionValues?
+        ): android.animation.Animator? {
+            return try {
+                super.createAnimator(sceneRoot, startValues, endValues)
+            } catch (e: IllegalArgumentException) {
+                null
+            }
+        }
+    }
+
+    /**
+     * True when [view] sits under android:id/content in the view tree —
+     * the precondition MaterialContainerTransform needs to resolve its
+     * drawing view. A shared element that fails this check must never
+     * be launched as a scene transition (fall back to a plain motion).
+     */
+    fun hasContentAncestor(view: View): Boolean {
+        var parent = view.parent
+        while (parent is View) {
+            if (parent.id == android.R.id.content) return true
+            parent = parent.parent
+        }
+        return false
+    }
+
     /** Launches [intent] from [activity] with the current motion style. */
     fun startActivity(
         activity: Activity,
@@ -45,11 +95,18 @@ object TransitionHelper {
     ) {
         val style = MotionStyle.effective(activity)
         if (style.usesSharedElement() && sharedView != null && sharedName != null) {
-            intent.putExtra(EXTRA_SHARED_USED, true)
-            val options = ActivityOptions.makeSceneTransitionAnimation(
-                activity, android.util.Pair(sharedView, sharedName)
-            )
-            activity.startActivity(intent, options.toBundle())
+            if (hasContentAncestor(sharedView)) {
+                intent.putExtra(EXTRA_SHARED_USED, true)
+                val options = ActivityOptions.makeSceneTransitionAnimation(
+                    activity, android.util.Pair(sharedView, sharedName)
+                )
+                activity.startActivity(intent, options.toBundle())
+                return
+            }
+            // Last resort only: the shared view cannot be morphed safely,
+            // so run the same launch as a fade instead of crashing.
+            activity.startActivity(intent)
+            activity.overridePendingTransition(R.anim.fade_in, R.anim.fade_out)
             return
         }
         if (style == MotionStyle.REVEAL) {
@@ -168,7 +225,7 @@ object TransitionHelper {
     fun sharedTransition(): TransitionSet {
         return TransitionSet().apply {
             addTransition(
-                MaterialContainerTransform().apply {
+                SafeContainerTransform().apply {
                     duration = 450
                     interpolator = AccelerateDecelerateInterpolator()
                 }

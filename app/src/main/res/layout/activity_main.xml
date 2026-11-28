@@ -71,18 +71,6 @@
                     android:textSize="14sp"
                     android:textStyle="bold" />
 
-                <TextView
-                    android:id="@+id/freeLine"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="3dp"
-                    android:ellipsize="end"
-                    android:maxLines="2"
-                    android:text="@string/settings_free"
-                    android:textColor="@color/zeno_gold"
-                    android:textSize="12sp"
-                    android:textStyle="bold" />
-
             </LinearLayout>
 
             <ImageButton
@@ -1428,15 +1416,6 @@
                         android:textColor="@color/zeno_ink2"
                         android:textSize="14sp" />
 
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="8dp"
-                        android:text="@string/settings_free"
-                        android:textColor="@color/zeno_gold"
-                        android:textSize="13sp"
-                        android:textStyle="bold" />
-
                 </LinearLayout>
 
                 <!-- Contact (WhatsApp) -->
@@ -1570,6 +1549,7 @@
                 android:orientation="horizontal">
 
                 <com.google.android.material.card.MaterialCardView
+                    android:id="@+id/miniCoverCard"
                     android:layout_width="46dp"
                     android:layout_height="46dp"
                     android:transitionName="cover"

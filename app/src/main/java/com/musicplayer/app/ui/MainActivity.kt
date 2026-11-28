@@ -33,6 +33,7 @@ import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
 import androidx.recyclerview.widget.ConcatAdapter
 import androidx.recyclerview.widget.GridLayoutManager
+import com.google.android.material.transition.platform.MaterialContainerTransformSharedElementCallback
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.google.common.util.concurrent.ListenableFuture
@@ -319,6 +320,11 @@ class MainActivity : FullScreenActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // Required glue for the MaterialContainerTransform shared-element
+        // transition (v1.0.6 fix): without this callback the library never
+        // tags the snapshot views, and the container transform crashes the
+        // app when opening the full player.
+        setExitSharedElementCallback(MaterialContainerTransformSharedElementCallback())
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
@@ -368,10 +374,14 @@ class MainActivity : FullScreenActivity() {
         binding.miniPrev.setOnClickListener { PlayerConnection.previous() }
         binding.miniOpen.setOnClickListener {
             // Shared element: the cover grows into the full-player disc.
+            // The shared view must be the container that carries the
+            // transitionName ("cover") — a Shapeable MaterialCardView —
+            // not the inner ImageView, otherwise the container transform
+            // cannot morph it and the transition crashes (v1.0.5).
             TransitionHelper.startActivity(
                 this,
                 Intent(this, PlayerActivity::class.java),
-                sharedView = binding.miniCover,
+                sharedView = binding.miniCoverCard,
                 sharedName = "cover"
             )
         }

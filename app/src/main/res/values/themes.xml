@@ -24,5 +24,55 @@
         <item name="android:navigationBarColor">@android:color/transparent</item>
         <item name="android:windowLayoutInDisplayCutoutMode">shortEdges</item>
         <item name="android:windowDrawsSystemBarBackgrounds">true</item>
+        <!--
+          Zeno identity for EVERY popup menu and dialog in the app
+          (v1.0.6 fix): the Settings pickers (sleep timer, waveform
+          shape, motion type…) used to show as plain grey Android boxes.
+          The theme now forces the dark-navy + gold identity everywhere:
+          alertDialogTheme covers all AlertDialog.Builder calls (AppCompat),
+          materialAlertDialogTheme covers MaterialAlertDialogBuilder, and
+          popupMenuStyle covers all PopupMenu calls. No per-call code
+          change is needed — the theme applies app-wide.
+        -->
+        <item name="alertDialogTheme">@style/ThemeOverlay.ZenoPlay.Dialog</item>
+        <item name="materialAlertDialogTheme">@style/ThemeOverlay.ZenoPlay.Dialog</item>
+        <item name="dialogTheme">@style/ThemeOverlay.ZenoPlay.Dialog</item>
+        <item name="popupMenuStyle">@style/Widget.ZenoPlay.PopupMenu</item>
+        <item name="android:popupMenuStyle">@style/Widget.ZenoPlay.PopupMenu</item>
+        <item name="android:textAppearanceLargePopupMenu">@style/TextAppearance.ZenoPlay.PopupMenu</item>
+        <item name="android:textAppearanceSmallPopupMenu">@style/TextAppearance.ZenoPlay.PopupMenu</item>
+    </style>
+
+    <!-- Zeno dialog: dark navy background, cream text, cyan primary / gold accent. -->
+    <style name="ThemeOverlay.ZenoPlay.Dialog" parent="ThemeOverlay.Material3.Dialog.Alert">
+        <item name="android:windowBackground">@drawable/bg_dialog</item>
+        <item name="android:background">@drawable/bg_dialog</item>
+        <item name="android:textColorPrimary">@color/zeno_ink</item>
+        <item name="android:textColorSecondary">@color/zeno_ink2</item>
+        <item name="android:textColor">@color/zeno_ink</item>
+        <item name="colorPrimary">@color/zeno_cyan</item>
+        <item name="colorAccent">@color/zeno_gold</item>
+        <item name="colorOnSurface">@color/zeno_ink</item>
+        <item name="colorSurface">@color/zeno_dialog_bg</item>
+        <item name="buttonBarPositiveButtonStyle">@style/Widget.ZenoPlay.DialogButton</item>
+        <item name="buttonBarNegativeButtonStyle">@style/Widget.ZenoPlay.DialogButton</item>
+        <item name="buttonBarNeutralButtonStyle">@style/Widget.ZenoPlay.DialogButton</item>
+    </style>
+
+    <!-- Gold dialog buttons (OK / Cancel / …). -->
+    <style name="Widget.ZenoPlay.DialogButton" parent="Widget.Material3.Button.TextButton.Dialog">
+        <item name="android:textColor">@color/zeno_gold</item>
+    </style>
+
+    <!-- Zeno popup menu: dark navy rounded background, cream items. -->
+    <style name="Widget.ZenoPlay.PopupMenu" parent="Widget.AppCompat.PopupMenu">
+        <item name="android:popupBackground">@drawable/bg_popup_menu</item>
+        <item name="android:textColor">@color/zeno_ink</item>
+    </style>
+
+    <!-- Popup-menu item text: cream, same as the rest of the app. -->
+    <style name="TextAppearance.ZenoPlay.PopupMenu" parent="TextAppearance.AppCompat.Widget.PopupMenu.Large">
+        <item name="android:textColor">@color/zeno_ink</item>
+        <item name="android:textSize">16sp</item>
     </style>
 </resources>

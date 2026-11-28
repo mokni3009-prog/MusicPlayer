@@ -352,6 +352,12 @@ class PlaybackService : MediaLibraryService() {
             } else if (vlcPlayingCurrent || VlcEngine.active) {
                 VlcEngine.stop()
                 vlcPlayingCurrent = false
+                // v1.0.6: the ExoPlayer volume must be re-applied here —
+                // while VLC owned the track the player's volume was never
+                // touched, so without this the slider setting was lost
+                // on every VLC -> ExoPlayer switch.
+                player?.volume = VolumeBoost.playerVolume() *
+                    PlayerConnection.sleepFadeFactor
                 player?.play()
             }
         }
@@ -513,6 +519,12 @@ class PlaybackService : MediaLibraryService() {
         player = ExoPlayer.Builder(this).build()
         val plain = player!!
         plain.addListener(playerListener)
+        // v1.0.6: a fresh player defaults to volume 1.0 — restore the
+        // user's slider setting (and the VLC volume) or the volume bar
+        // silently stops working after a fallback rebuild.
+        VolumeBoost.setVolumePercent(PlaybackStateStore.loadVolume(applicationContext))
+        plain.volume = VolumeBoost.playerVolume()
+        VlcEngine.setVolume(VolumeBoost.volumePercent)
         if (items.isNotEmpty()) {
             plain.setMediaItems(items, index, position)
             plain.shuffleModeEnabled = shuffle

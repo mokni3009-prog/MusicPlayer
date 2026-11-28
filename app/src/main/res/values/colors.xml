@@ -16,6 +16,7 @@
     <color name="zeno_green">#9BE15D</color>
     <color name="zeno_on_gradient">#061224</color>
     <color name="zeno_track_bg">#24FFFFFF</color>
+    <color name="zeno_dialog_bg">#12264F</color>
 
     <!-- Aliases kept for the Material theme attributes -->
     <color name="md_theme_primary">#2DE2E6</color>

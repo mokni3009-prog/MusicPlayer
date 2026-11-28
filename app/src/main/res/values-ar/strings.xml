@@ -158,7 +158,7 @@
     <string name="settings_notification_title">إشعار التشغيل</string>
     <string name="settings_notification_desc">أثناء التشغيل، يعرض الإشعار العنوان والفنان والغلاف وأزرار السابق/التشغيل/التالي/الإغلاق، مع موضع الأغنية في القائمة (n/N).</string>
     <string name="settings_about_title">حول</string>
-    <string name="settings_about_desc">Zeno Play — مشغل موسيقى. مكتبة محلية، تشغيل في الخلفية مع إشعار، موجات صوتية مباشرة، تضخيم الصوت حتى 200% ودعم كل صيغ الصوت. مجاني للأبد، بلا إعلانات.</string>
+    <string name="settings_about_desc">Zeno Play — مشغل موسيقى. مكتبة محلية، تشغيل في الخلفية مع إشعار، موجات صوتية مباشرة، تضخيم الصوت حتى 200% ودعم كل صيغ الصوت.</string>
     <string name="settings_update_title">التحديثات</string>
     <string name="settings_update_desc">Zeno Play يحدّث نفسه مباشرة من GitHub، بلا إلغاء تثبيت.</string>
     <string name="settings_lyrics_title">كلمات متزامنة</string>

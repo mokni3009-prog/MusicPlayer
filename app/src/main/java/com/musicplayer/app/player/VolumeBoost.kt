@@ -3,7 +3,7 @@ package com.musicplayer.app.player
 /**
  * Shared volume state (0..200%) for the playback chain.
  *
- * - 0..100% is applied as the ExoPlayer / VLC volume (0.0..1.0).
+ * - 0..100% is applied as the ExoPlayer / VLC volume.
  * - 100..200% is the BOOST: the player stays at full volume and
  *   [GainAudioProcessor] adds the extra gain (1.0..2.0) with a soft-clip
  *   limiter so the sound never distorts.
@@ -12,6 +12,13 @@ package com.musicplayer.app.player
  *
  * The processor reads these volatile fields on every audio buffer, so a
  * volume change takes effect immediately without rebuilding the player.
+ *
+ * Volume curve (v1.0.6 fix): the 0..100% range used to be LINEAR
+ * (percent / 100), which the ear hears as almost flat — 50% is only
+ * -6 dB, so dragging the slider barely changed the loudness and only
+ * 0% (silence) felt different. The player volume is now a SQUARE law
+ * (perceptual / audio taper): 50% is -12 dB, 80% is -4 dB, so the
+ * slider feels graduated across its whole travel.
  */
 object VolumeBoost {
     /** Extra gain for the 100..200% boost range (1.0 = no boost). */
@@ -40,8 +47,11 @@ object VolumeBoost {
         boostGain = if (volumePercent > 100) volumePercent / 100f else 1.0f
     }
 
-    /** Player volume (0.0..1.0) for the 0..100% part. */
-    fun playerVolume(): Float = (volumePercent.coerceAtMost(100)) / 100f
+    /** Player volume (0.0..1.0) for the 0..100% part — square law, perceptual. */
+    fun playerVolume(): Float {
+        val linear = (volumePercent.coerceAtMost(100)) / 100f
+        return linear * linear
+    }
 
     fun setReplayGainDb(db: Float) {
         // Clamp to a sane range (-12..+12 dB) and convert to a factor.

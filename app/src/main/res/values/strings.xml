@@ -158,7 +158,7 @@
     <string name="settings_notification_title">Notification de lecture</string>
     <string name="settings_notification_desc">Pendant la lecture, la notification affiche le titre, l’artiste, la pochette et les boutons Précédent / Lecture / Suivant / Fermer, avec la position dans la file (n/N).</string>
     <string name="settings_about_title">À propos</string>
-    <string name="settings_about_desc">Zeno Play — Lecteur de musique. Bibliothèque locale, lecture en arrière-plan avec notification, visualiseur audio en direct, amplification du volume jusqu’à 200 % et prise en charge de tous les formats audio. Gratuit pour toujours, sans publicité.</string>
+    <string name="settings_about_desc">Zeno Play — Lecteur de musique. Bibliothèque locale, lecture en arrière-plan avec notification, visualiseur audio en direct, amplification du volume jusqu’à 200 % et prise en charge de tous les formats audio.</string>
     <string name="settings_update_title">Mises à jour</string>
     <string name="settings_update_desc">Zeno Play se met à jour directement depuis GitHub, sans désinstallation.</string>
     <string name="settings_lyrics_title">Paroles synchronisées</string>
